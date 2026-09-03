@@ -1,0 +1,16 @@
+{
+  "name": "btc-terminal-data-builder",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Genera data/*.json para btc_terminal a partir de fuentes gratuitas (CoinGecko, data.binance.vision, Coinalyze opcional). No necesita Python.",
+  "scripts": {
+    "build": "node build_historical_data.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1"
+  }
+}
