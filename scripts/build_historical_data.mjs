@@ -32,6 +32,18 @@ mkdirSync(OUT_DIR, { recursive: true });
 
 const SYMBOL = "BTCUSDT";
 const COINALYZE_API_KEY = (process.env.COINALYZE_API_KEY || "").trim();
+const COINGECKO_API_KEY = (process.env.COINGECKO_API_KEY || "").trim();
+
+if (!COINGECKO_API_KEY) {
+  console.error(
+    "\nFalta COINGECKO_API_KEY.\n" +
+    "CoinGecko empezó a exigir una key propia incluso para su tier gratis (Demo API).\n" +
+    "Sacá una gratis en https://www.coingecko.com/en/developers/dashboard (no pide tarjeta)\n" +
+    "y seteala como variable de entorno / secret antes de correr este script.\n"
+  );
+  process.exit(1);
+}
+console.log(`[debug] COINGECKO_API_KEY recibida, largo: ${COINGECKO_API_KEY.length} caracteres (nunca se imprime el contenido)`);
 
 const CYCLES = [
   { id: "c1", start: "2013-01-01", end: "2016-01-01", wantOi: false, wantHourly: false },
@@ -77,8 +89,13 @@ async function fetchCoingeckoPriceDaily() {
   const url =
     "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart" +
     "?vs_currency=usd&days=max&interval=daily";
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`CoinGecko HTTP ${res.status}`);
+  const res = await fetch(url, {
+    headers: { "x-cg-demo-api-key": COINGECKO_API_KEY },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "(sin cuerpo)");
+    throw new Error(`CoinGecko HTTP ${res.status} — respuesta: ${body}`);
+  }
   const json = await res.json();
   const points = json.prices.map(([t, price]) => ({ t, price }));
   log(`  -> ${points.length} puntos diarios de precio`);
