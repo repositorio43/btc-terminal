@@ -21,6 +21,7 @@ jobs:
         working-directory: scripts
         env:
           COINALYZE_API_KEY: ${{ secrets.COINALYZE_API_KEY }}
+          COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
         run: node build_historical_data.mjs
 
       - name: Commitear los JSON actualizados
