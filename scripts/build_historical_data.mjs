@@ -5,7 +5,7 @@
  * Requiere Node 18 o más nuevo (usa fetch nativo) + una sola dependencia: jszip.
  *
  * Mismas fuentes gratuitas que la versión Python:
- *   - Precio diario completo (2013->hoy): CoinGecko, sin key.
+ *   - Precio diario completo (2013->hoy): CryptoCompare, sin key obligatoria.
  *   - Open Interest + ratio long/short (5-min): data.binance.vision, sin key.
  *     Solo existe desde sept-2019 (cuando arrancó Binance Futures) — por eso
  *     Ciclo 1 y 2 quedan sin esto, no es un límite del script.
@@ -32,18 +32,10 @@ mkdirSync(OUT_DIR, { recursive: true });
 
 const SYMBOL = "BTCUSDT";
 const COINALYZE_API_KEY = (process.env.COINALYZE_API_KEY || "").trim();
-const COINGECKO_API_KEY = (process.env.COINGECKO_API_KEY || "").trim();
-
-if (!COINGECKO_API_KEY) {
-  console.error(
-    "\nFalta COINGECKO_API_KEY.\n" +
-    "CoinGecko empezó a exigir una key propia incluso para su tier gratis (Demo API).\n" +
-    "Sacá una gratis en https://www.coingecko.com/en/developers/dashboard (no pide tarjeta)\n" +
-    "y seteala como variable de entorno / secret antes de correr este script.\n"
-  );
-  process.exit(1);
-}
-console.log(`[debug] COINGECKO_API_KEY recibida, largo: ${COINGECKO_API_KEY.length} caracteres (nunca se imprime el contenido)`);
+// CryptoCompare no exige key para uso moderado (limita por IP, no por cuenta).
+// Si querés más margen, sacá una gratis en cryptocompare.com/cryptopian/api-keys
+// y seteala como CRYPTOCOMPARE_API_KEY — es opcional.
+const CRYPTOCOMPARE_API_KEY = (process.env.CRYPTOCOMPARE_API_KEY || "").trim();
 
 const CYCLES = [
   { id: "c1", start: "2013-01-01", end: "2016-01-01", wantOi: false, wantHourly: false },
@@ -81,23 +73,50 @@ function monthsRange(start, end) {
 }
 
 /* ------------------------------------------------------------------ */
-/* 1. Precio — CoinGecko                                               */
+/* 1. Precio — CryptoCompare (histórico completo, paginado, sin key)   */
 /* ------------------------------------------------------------------ */
+// CoinGecko limita su tier gratis a los últimos 365 días (cambio reciente
+// de su política). CryptoCompare no tiene ese límite: histoday con
+// paginación por "toTs" trae todo el historial diario desde que el par
+// empezó a cotizar (BTC/USD ~2010), gratis y sin key obligatoria.
 
-async function fetchCoingeckoPriceDaily() {
-  log("Descargando histórico de precio diario completo desde CoinGecko…");
-  const url =
-    "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart" +
-    "?vs_currency=usd&days=max&interval=daily";
-  const res = await fetch(url, {
-    headers: { "x-cg-demo-api-key": COINGECKO_API_KEY },
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "(sin cuerpo)");
-    throw new Error(`CoinGecko HTTP ${res.status} — respuesta: ${body}`);
+async function fetchPriceDailyFull() {
+  log("Descargando histórico de precio diario completo desde CryptoCompare…");
+  const cutoffSec = Math.floor(Date.parse("2013-01-01T00:00:00Z") / 1000);
+  let toTs = Math.floor(Date.now() / 1000);
+  const byTs = new Map();
+  let guard = 0;
+
+  while (guard++ < 30) { // 30 páginas de 2000 días = ~160 años de margen, de sobra
+    const url = new URL("https://min-api.cryptocompare.com/data/v2/histoday");
+    url.searchParams.set("fsym", "BTC");
+    url.searchParams.set("tsym", "USD");
+    url.searchParams.set("limit", "2000");
+    url.searchParams.set("toTs", String(toTs));
+    if (CRYPTOCOMPARE_API_KEY) url.searchParams.set("api_key", CRYPTOCOMPARE_API_KEY);
+
+    const res = await fetch(url);
+    if (!res.ok) {
+      const body = await res.text().catch(() => "(sin cuerpo)");
+      throw new Error(`CryptoCompare HTTP ${res.status} — respuesta: ${body}`);
+    }
+    const json = await res.json();
+    if (json.Response !== "Success") {
+      throw new Error(`CryptoCompare error: ${json.Message || JSON.stringify(json)}`);
+    }
+    const rows = json.Data.Data.filter((d) => d.close > 0);
+    if (!rows.length) break;
+    for (const r of rows) byTs.set(r.time, r.close);
+
+    const earliest = rows[0].time;
+    if (earliest <= cutoffSec) break;
+    toTs = earliest - 86400;
+    await new Promise((r) => setTimeout(r, 150)); // cortesía con el rate limit por IP
   }
-  const json = await res.json();
-  const points = json.prices.map(([t, price]) => ({ t, price }));
+
+  const points = [...byTs.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([t, price]) => ({ t: t * 1000, price }));
   log(`  -> ${points.length} puntos diarios de precio`);
   return points;
 }
@@ -306,13 +325,13 @@ async function buildCycle(cycle, priceDaily) {
 }
 
 async function main() {
-  const priceDaily = await fetchCoingeckoPriceDaily();
+  const priceDaily = await fetchPriceDailyFull();
 
   const manifest = {
     generated_at: new Date().toISOString(),
     generator: "build_historical_data.mjs (Node.js, sin Python)",
     sources: {
-      price: "CoinGecko API (market_chart, daily, days=max)",
+      price: "CryptoCompare API (histoday, paginado con toTs, sin key obligatoria)",
       open_interest_long_short: "data.binance.vision futures/um/daily/metrics (5-min, resampleado)",
       hourly_price_cycle3: "data.binance.vision futures/um/monthly/klines 1h",
       liquidations: COINALYZE_API_KEY
@@ -322,7 +341,7 @@ async function main() {
     note:
       "Ciclo 1 y 2 no tienen open interest / long-short / liquidaciones reales: " +
       "los futuros perpetuos con esos datos no existían en 2013-2020 a esta escala. " +
-      "Solo llevan precio real (CoinGecko).",
+      "Solo llevan precio real (CryptoCompare).",
   };
 
   for (const cycle of CYCLES) {
