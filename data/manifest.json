@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-04T06:24:08.443Z",
+  "generated_at": "2026-09-04T06:53:05.324Z",
   "generator": "build_historical_data.mjs (Node.js, sin Python)",
   "sources": {
     "price": "Kraken public API (OHLC, interval=1440, paginado con since)",
