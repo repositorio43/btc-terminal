@@ -5,7 +5,10 @@
  * Requiere Node 18 o más nuevo (usa fetch nativo) + una sola dependencia: jszip.
  *
  * Mismas fuentes gratuitas que la versión Python:
- *   - Precio diario completo (2013->hoy): CryptoCompare, sin key obligatoria.
+ *   - Precio diario completo (2013->hoy): Kraken (API pública, exchange
+ *     primario, sin key). CoinGecko free tier quedó limitado a 365 días y
+ *     CryptoCompare/CoinDesk Data cerró su tier gratis en mayo-2026, por eso
+ *     el script usa Kraken directamente en vez de un agregador de terceros.
  *   - Open Interest + ratio long/short (5-min): data.binance.vision, sin key.
  *     Solo existe desde sept-2019 (cuando arrancó Binance Futures) — por eso
  *     Ciclo 1 y 2 quedan sin esto, no es un límite del script.
@@ -32,10 +35,6 @@ mkdirSync(OUT_DIR, { recursive: true });
 
 const SYMBOL = "BTCUSDT";
 const COINALYZE_API_KEY = (process.env.COINALYZE_API_KEY || "").trim();
-// CryptoCompare no exige key para uso moderado (limita por IP, no por cuenta).
-// Si querés más margen, sacá una gratis en cryptocompare.com/cryptopian/api-keys
-// y seteala como CRYPTOCOMPARE_API_KEY — es opcional.
-const CRYPTOCOMPARE_API_KEY = (process.env.CRYPTOCOMPARE_API_KEY || "").trim();
 
 const CYCLES = [
   { id: "c1", start: "2013-01-01", end: "2016-01-01", wantOi: false, wantHourly: false },
@@ -73,51 +72,58 @@ function monthsRange(start, end) {
 }
 
 /* ------------------------------------------------------------------ */
-/* 1. Precio — CryptoCompare (histórico completo, paginado, sin key)   */
+/* 1. Precio — Kraken (histórico completo, paginado, sin key)          */
 /* ------------------------------------------------------------------ */
-// CoinGecko limita su tier gratis a los últimos 365 días (cambio reciente
-// de su política). CryptoCompare no tiene ese límite: histoday con
-// paginación por "toTs" trae todo el historial diario desde que el par
-// empezó a cotizar (BTC/USD ~2010), gratis y sin key obligatoria.
+// Tanto CoinGecko (limitado a 365 días en su tier gratis) como CryptoCompare
+// / CoinDesk Data (retiraron su tier gratis en mayo de 2026) dejaron de servir
+// para esto. Kraken es un exchange primario, no un agregador de terceros: su
+// endpoint público de OHLC no pide key y no depende de una política comercial
+// de "tier gratis" que puedan cerrar de un día para el otro. Cotiza BTC/USD
+// desde 2013, que es justo lo que necesitamos para Ciclo 1.
+
+async function fetchKrakenDailySince(sinceSec) {
+  const url = new URL("https://api.kraken.com/0/public/OHLC");
+  url.searchParams.set("pair", "XBTUSD");
+  url.searchParams.set("interval", "1440"); // 1440 min = 1 día
+  url.searchParams.set("since", String(sinceSec));
+  const res = await fetch(url);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "(sin cuerpo)");
+    throw new Error(`Kraken HTTP ${res.status} — respuesta: ${body}`);
+  }
+  const json = await res.json();
+  if (json.error && json.error.length) {
+    throw new Error(`Kraken error: ${json.error.join(", ")}`);
+  }
+  const pairKey = Object.keys(json.result).find((k) => k !== "last");
+  return { rows: json.result[pairKey] || [], last: json.result.last };
+}
 
 async function fetchPriceDailyFull() {
-  log("Descargando histórico de precio diario completo desde CryptoCompare…");
-  const cutoffSec = Math.floor(Date.parse("2013-01-01T00:00:00Z") / 1000);
-  let toTs = Math.floor(Date.now() / 1000);
+  log("Descargando histórico de precio diario completo desde Kraken…");
+  let since = Math.floor(Date.parse("2013-01-01T00:00:00Z") / 1000);
+  const nowSec = Math.floor(Date.now() / 1000);
   const byTs = new Map();
   let guard = 0;
 
-  while (guard++ < 30) { // 30 páginas de 2000 días = ~160 años de margen, de sobra
-    const url = new URL("https://min-api.cryptocompare.com/data/v2/histoday");
-    url.searchParams.set("fsym", "BTC");
-    url.searchParams.set("tsym", "USD");
-    url.searchParams.set("limit", "2000");
-    url.searchParams.set("toTs", String(toTs));
-    if (CRYPTOCOMPARE_API_KEY) url.searchParams.set("api_key", CRYPTOCOMPARE_API_KEY);
-
-    const res = await fetch(url);
-    if (!res.ok) {
-      const body = await res.text().catch(() => "(sin cuerpo)");
-      throw new Error(`CryptoCompare HTTP ${res.status} — respuesta: ${body}`);
-    }
-    const json = await res.json();
-    if (json.Response !== "Success") {
-      throw new Error(`CryptoCompare error: ${json.Message || JSON.stringify(json)}`);
-    }
-    const rows = json.Data.Data.filter((d) => d.close > 0);
+  while (since < nowSec && guard++ < 40) {
+    const { rows, last } = await fetchKrakenDailySince(since);
     if (!rows.length) break;
-    for (const r of rows) byTs.set(r.time, r.close);
-
-    const earliest = rows[0].time;
-    if (earliest <= cutoffSec) break;
-    toTs = earliest - 86400;
-    await new Promise((r) => setTimeout(r, 150)); // cortesía con el rate limit por IP
+    for (const r of rows) {
+      const t = r[0];
+      const close = parseFloat(r[4]);
+      if (close > 0) byTs.set(t, close);
+    }
+    const newSince = last && last > since ? last : rows[rows.length - 1][0];
+    if (newSince <= since) break; // corte de seguridad anti-loop infinito
+    since = newSince;
+    await new Promise((r) => setTimeout(r, 300)); // cortesía con el rate limit público
   }
 
   const points = [...byTs.entries()]
     .sort((a, b) => a[0] - b[0])
     .map(([t, price]) => ({ t: t * 1000, price }));
-  log(`  -> ${points.length} puntos diarios de precio`);
+  log(`  -> ${points.length} puntos diarios de precio (Kraken cotiza XBTUSD desde 2013, puede faltar algún mes muy inicial)`);
   return points;
 }
 
@@ -331,7 +337,7 @@ async function main() {
     generated_at: new Date().toISOString(),
     generator: "build_historical_data.mjs (Node.js, sin Python)",
     sources: {
-      price: "CryptoCompare API (histoday, paginado con toTs, sin key obligatoria)",
+      price: "Kraken public API (OHLC, interval=1440, paginado con since)",
       open_interest_long_short: "data.binance.vision futures/um/daily/metrics (5-min, resampleado)",
       hourly_price_cycle3: "data.binance.vision futures/um/monthly/klines 1h",
       liquidations: COINALYZE_API_KEY
@@ -341,7 +347,7 @@ async function main() {
     note:
       "Ciclo 1 y 2 no tienen open interest / long-short / liquidaciones reales: " +
       "los futuros perpetuos con esos datos no existían en 2013-2020 a esta escala. " +
-      "Solo llevan precio real (CryptoCompare).",
+      "Solo llevan precio real (Kraken).",
   };
 
   for (const cycle of CYCLES) {
