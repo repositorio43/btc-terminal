@@ -1,11 +1,12 @@
 {
-  "generated_at": "2026-09-05T03:03:15.962Z",
+  "generated_at": "2026-09-06T04:43:54.327Z",
   "generator": "build_historical_data.mjs (Node.js, sin Python)",
   "sources": {
     "price": "CSV público en GitHub (ff137/bitstamp-btcusd-minute-data, Bitstamp 1-min desde 2012, colapsado a cierre diario)",
     "open_interest_long_short": "data.binance.vision futures/um/daily/metrics (5-min, resampleado)",
     "hourly_price_cycle3": "data.binance.vision futures/um/monthly/klines 1h",
-    "liquidations": "Coinalyze API (liquidation-history)"
+    "liquidations": "data.binance.vision futures/um/daily/liquidationSnapshot (bulk diario; sin datos después de 2024-03-31, Binance dejó de publicarlo)",
+    "funding_rate": "data.binance.vision futures/um/monthly/fundingRate (bulk mensual)"
   },
-  "note": "Ciclo 1 y 2 no tienen open interest / long-short / liquidaciones reales: los futuros perpetuos con esos datos no existían en 2013-2020 a esta escala. Solo llevan precio real (CSV de Bitstamp/GitHub, cobertura desde 2012)."
+  "note": "Ciclo 1 y 2 no tienen open interest / long-short / liquidaciones / funding real: los futuros perpetuos con esos datos no existían en 2013-2020 a esta escala. Solo llevan precio real (CSV de Bitstamp/GitHub, cobertura desde 2012)."
 }
