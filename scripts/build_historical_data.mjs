@@ -12,12 +12,15 @@
  *     Solo existe desde sept-2019 (cuando arrancó Binance Futures) — por eso
  *     Ciclo 1 y 2 quedan sin esto, no es un límite del script.
  *   - Precio horario preciso para Ciclo 3: klines mensuales de data.binance.vision.
- *   - Liquidaciones (opcional): Coinalyze API, key gratis con registro.
+ *   - Liquidaciones: data.binance.vision futures/um/daily/liquidationSnapshot
+ *     (bulk diario, sin key). Sin datos después de 2024-03-31 (Binance dejó
+ *     de publicarlo para USD-M), pero no afecta a Ciclo 3.
+ *   - Funding rate: data.binance.vision futures/um/monthly/fundingRate
+ *     (bulk mensual, sin key).
  *
  * Uso:
  *   cd scripts
  *   npm install
- *   export COINALYZE_API_KEY=xxxx     # opcional (PowerShell: $env:COINALYZE_API_KEY='xxxx')
  *   node build_historical_data.mjs
  *
  * Salida: ../data/c1.json, c2.json, c3.json, manifest.json
@@ -34,7 +37,6 @@ const OUT_DIR = path.join(__dirname, "..", "data");
 mkdirSync(OUT_DIR, { recursive: true });
 
 const SYMBOL = "BTCUSDT";
-const COINALYZE_API_KEY = (process.env.COINALYZE_API_KEY || "").trim();
 
 const CYCLES = [
   { id: "c1", start: "2013-01-01", end: "2016-01-01", wantOi: false, wantHourly: false },
@@ -198,34 +200,71 @@ async function fetchHourlyPriceRange(symbol, start, end) {
 }
 
 /* ------------------------------------------------------------------ */
-/* 4. Liquidaciones (opcional) — Coinalyze                              */
+/* 4. Liquidaciones — Binance liquidationSnapshot (bulk diario)        */
 /* ------------------------------------------------------------------ */
+// Coinalyze quedó afuera: en la práctica fallaba con HTTP 400 en todas las
+// corridas reales de este proyecto, nunca trajo un solo dato. Binance tiene
+// esto gratis en su propio archivo bulk, con la misma confiabilidad que ya
+// usamos para OI/long-short. Ojo: Binance dejó de publicar este archivo para
+// USD-M después del 2024-03-31 (issue conocido, no es un bug nuestro) — no
+// afecta a Ciclo 3 (termina 2024-01-01) pero si algún día se extiende el
+// rango de Ciclo 4 hacia atrás con este script, esa ventana quedaría corta.
 
-async function fetchCoinalyzeLiquidations(symbol, startMs, endMs) {
-  if (!COINALYZE_API_KEY) {
-    log("  (COINALYZE_API_KEY no seteada -> se omiten liquidaciones históricas)");
-    return [];
+async function fetchBinanceLiquidationsRange(symbol, start, end) {
+  log(`Descargando liquidaciones históricas ${start} -> ${end} (Binance liquidationSnapshot, bulk diario)…`);
+  const days = dateRange(start, end);
+  const rows = [];
+  let misses = 0;
+  for (const day of days) {
+    const url = `https://data.binance.vision/data/futures/um/daily/liquidationSnapshot/${symbol}/${symbol}-liquidationSnapshot-${day}.zip`;
+    const text = await fetchZipText(url);
+    if (!text) { misses++; continue; }
+    for (const r of parseCsvWithHeader(text)) {
+      const t = parseInt(r.time ?? r.order_trade_time, 10);
+      const price = parseFloat(r.average_price ?? r.price);
+      const qty = parseFloat(r.original_quantity ?? r.order_filled_accumulated_quantity);
+      if (!isFinite(t) || isNaN(price) || isNaN(qty)) continue;
+      const notional = price * qty;
+      // side="SELL" -> se liquidó una posición LONG (el exchange vende para cerrarla)
+      // side="BUY"  -> se liquidó una posición SHORT
+      rows.push({
+        t,
+        liqLong: r.side === "SELL" ? notional : 0,
+        liqShort: r.side === "BUY" ? notional : 0,
+      });
+    }
+    await new Promise((r) => setTimeout(r, 40));
   }
-  log("Descargando histórico de liquidaciones desde Coinalyze…");
-  const url = new URL("https://api.coinalyze.net/v1/liquidation-history");
-  url.searchParams.set("symbols", symbol);
-  url.searchParams.set("interval", "1day");
-  url.searchParams.set("from", Math.floor(startMs / 1000));
-  url.searchParams.set("to", Math.floor(endMs / 1000));
-  try {
-    const res = await fetch(url, { headers: { api_key: COINALYZE_API_KEY } });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const history = data[0]?.history || [];
-    return history.map((h) => ({ t: h.t * 1000, liqLong: h.l, liqShort: h.s }));
-  } catch (e) {
-    log(`  (Coinalyze falló: ${e.message} -> se omiten liquidaciones)`);
-    return [];
-  }
+  log(`  -> ${rows.length} eventos de liquidación, ${misses} días sin archivo (esperable antes de que existieran futuros, o después de mar-2024)`);
+  return rows;
 }
 
 /* ------------------------------------------------------------------ */
-/* 5. Resample + merge                                                  */
+/* 5. Funding rate — Binance fundingRate (bulk mensual)                */
+/* ------------------------------------------------------------------ */
+// Solo existe en carpeta "monthly", no "daily", en el bulk de Binance.
+
+async function fetchBinanceFundingRateRange(symbol, start, end) {
+  log(`Descargando funding rate histórico ${start} -> ${end} (Binance, bulk mensual)…`);
+  const months = monthsRange(start, end);
+  const rows = [];
+  for (const ym of months) {
+    const url = `https://data.binance.vision/data/futures/um/monthly/fundingRate/${symbol}/${symbol}-fundingRate-${ym}.zip`;
+    const text = await fetchZipText(url);
+    if (!text) continue;
+    for (const r of parseCsvWithHeader(text)) {
+      const t = parseInt(r.calc_time, 10);
+      const rate = parseFloat(r.last_funding_rate);
+      if (!isFinite(t) || isNaN(rate)) continue;
+      rows.push({ t, fundingRate: rate * 100 }); // guardado en % para que sea legible
+    }
+  }
+  log(`  -> ${rows.length} eventos de funding rate`);
+  return rows;
+}
+
+/* ------------------------------------------------------------------ */
+/* 6. Resample + merge                                                  */
 /* ------------------------------------------------------------------ */
 
 function bucketKey(t, bucketMs) {
@@ -270,7 +309,7 @@ function mergeByT(...arrays) {
 }
 
 function finalizePoints(points) {
-  const fields = ["price", "oi", "longRatio", "shortRatio", "liqLong", "liqShort"];
+  const fields = ["price", "oi", "longRatio", "shortRatio", "liqLong", "liqShort", "fundingRate"];
   return points.map((p) => {
     const out = { t: p.t };
     for (const f of fields) out[f] = p[f] != null ? Math.round(p[f] * 10000) / 10000 : null;
@@ -291,9 +330,13 @@ async function buildCycle(cycle, priceDaily) {
   const priceSlice = priceDaily.filter((p) => p.t >= startMs && p.t < endMs);
 
   let oiLs = [];
-  if (wantOi) oiLs = await fetchBinanceOiLongShortRange(SYMBOL, start, end);
-
-  const liq = await fetchCoinalyzeLiquidations("BTCUSDT_PERP.A", startMs, endMs);
+  let liq = [];
+  let funding = [];
+  if (wantOi) {
+    oiLs = await fetchBinanceOiLongShortRange(SYMBOL, start, end);
+    liq = await fetchBinanceLiquidationsRange(SYMBOL, start, end);
+    funding = await fetchBinanceFundingRateRange(SYMBOL, start, end);
+  }
 
   const result = { "1h": null, "1d": null, "1w": null };
 
@@ -301,13 +344,15 @@ async function buildCycle(cycle, priceDaily) {
   const priceD = aggregate(priceSlice, ["price"], DAY, "mean");
   const oiD = oiLs.length ? aggregate(oiLs, ["oi", "longRatio", "shortRatio"], DAY, "mean") : [];
   const liqD = liq.length ? aggregate(liq, ["liqLong", "liqShort"], DAY, "sum") : [];
-  result["1d"] = finalizePoints(mergeByT(priceD, oiD, liqD));
+  const fundingD = funding.length ? aggregate(funding, ["fundingRate"], DAY, "mean") : [];
+  result["1d"] = finalizePoints(mergeByT(priceD, oiD, liqD, fundingD));
 
   // ---- 1W ----
   const priceW = aggregate(priceSlice, ["price"], WEEK, "mean");
   const oiW = oiLs.length ? aggregate(oiLs, ["oi", "longRatio", "shortRatio"], WEEK, "mean") : [];
   const liqW = liq.length ? aggregate(liq, ["liqLong", "liqShort"], WEEK, "sum") : [];
-  result["1w"] = finalizePoints(mergeByT(priceW, oiW, liqW));
+  const fundingW = funding.length ? aggregate(funding, ["fundingRate"], WEEK, "mean") : [];
+  result["1w"] = finalizePoints(mergeByT(priceW, oiW, liqW, fundingW));
 
   // ---- 1H (solo si corresponde) ----
   if (wantHourly && oiLs.length) {
@@ -317,7 +362,8 @@ async function buildCycle(cycle, priceDaily) {
       : aggregate(priceSlice, ["price"], HOUR, "mean");
     const oiH = aggregate(oiLs, ["oi", "longRatio", "shortRatio"], HOUR, "mean");
     const liqH = liq.length ? aggregate(liq, ["liqLong", "liqShort"], HOUR, "sum") : [];
-    result["1h"] = finalizePoints(mergeByT(priceH, oiH, liqH));
+    const fundingH = funding.length ? aggregate(funding, ["fundingRate"], HOUR, "mean") : [];
+    result["1h"] = finalizePoints(mergeByT(priceH, oiH, liqH, fundingH));
   }
 
   for (const tf of Object.keys(result)) {
@@ -337,12 +383,11 @@ async function main() {
       price: "CSV público en GitHub (ff137/bitstamp-btcusd-minute-data, Bitstamp 1-min desde 2012, colapsado a cierre diario)",
       open_interest_long_short: "data.binance.vision futures/um/daily/metrics (5-min, resampleado)",
       hourly_price_cycle3: "data.binance.vision futures/um/monthly/klines 1h",
-      liquidations: COINALYZE_API_KEY
-        ? "Coinalyze API (liquidation-history)"
-        : "no disponible (COINALYZE_API_KEY no seteada)",
+      liquidations: "data.binance.vision futures/um/daily/liquidationSnapshot (bulk diario; sin datos después de 2024-03-31, Binance dejó de publicarlo)",
+      funding_rate: "data.binance.vision futures/um/monthly/fundingRate (bulk mensual)",
     },
     note:
-      "Ciclo 1 y 2 no tienen open interest / long-short / liquidaciones reales: " +
+      "Ciclo 1 y 2 no tienen open interest / long-short / liquidaciones / funding real: " +
       "los futuros perpetuos con esos datos no existían en 2013-2020 a esta escala. " +
       "Solo llevan precio real (CSV de Bitstamp/GitHub, cobertura desde 2012).",
   };
