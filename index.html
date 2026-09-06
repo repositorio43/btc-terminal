@@ -25,9 +25,13 @@
 }
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:var(--ui-font);}
-body{padding:18px;min-height:100vh;}
+body{padding:18px 32px;min-height:100vh;}
 
-.wrap{max-width:1320px;margin:0 auto;}
+.wrap{max-width:1800px;margin:0 auto;}
+
+@media(max-width:900px){
+  body{padding:12px;}
+}
 
 /* ---------- header ---------- */
 .hero{
@@ -46,6 +50,12 @@ body{padding:18px;min-height:100vh;}
 .price-live .px.up{color:var(--long);}
 .price-live .px.down{color:var(--short);}
 .price-live .chg{font-size:13px;color:var(--ink-dim);}
+
+@media(max-width:600px){
+  .hero h1{font-size:19px;}
+  .price-live{text-align:left;}
+  .price-live .px{font-size:24px;}
+}
 
 /* ---------- cycle selector ---------- */
 .cycles{display:flex;gap:8px;margin:16px 0;flex-wrap:wrap;}
@@ -110,9 +120,12 @@ body{padding:18px;min-height:100vh;}
 .chart-box{position:relative;height:420px;}
 .chart-box.small{height:220px;}
 
-.depth-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
-@media(max-width:760px){.depth-grid{grid-template-columns:1fr;}}
-.depth-title{font-size:11px;color:var(--ink-dim);margin-bottom:6px;font-family:var(--data-font);}
+@media(min-width:1500px){
+  .chart-box{height:560px;}
+}
+@media(max-width:700px){
+  .chart-box{height:300px;}
+}
 
 .legend-note{
   font-size:11px;color:var(--ink-dim);margin-top:8px;font-family:var(--data-font);
@@ -133,7 +146,7 @@ footer a{color:var(--oi);}
   <div class="hero">
     <div>
       <h1>BTC · Terminal de ciclos</h1>
-      <div class="sub">precio · open interest · long/short · liquidaciones · order book</div>
+      <div class="sub">precio · open interest · long/short · liquidaciones · funding rate</div>
     </div>
     <div class="price-live">
       <div class="px" id="livePrice">—</div>
@@ -161,25 +174,8 @@ footer a{color:var(--oi);}
     <div class="chart-box"><canvas id="mainChart"></canvas></div>
     <div class="legend-note">
       Ratio long y ratio short se grafican vinculados (short = 100 − long) sobre el mismo eje derecho, 0–100%.
-      Liquidaciones se muestran como línea de intensidad (USD, ventana móvil) coloreada por lado dominante.
-    </div>
-  </div>
-
-  <div class="panel">
-    <h2>Exposición y profundidad de order book</h2>
-    <div class="depth-grid">
-      <div>
-        <div class="depth-title">SPOT — bids vs asks</div>
-        <div class="chart-box small"><canvas id="depthSpot"></canvas></div>
-      </div>
-      <div>
-        <div class="depth-title">FUTUROS — bids vs asks</div>
-        <div class="chart-box small"><canvas id="depthFut"></canvas></div>
-      </div>
-    </div>
-    <div class="legend-note">
-      Profundidad acumulada ±3% desde el mid price. Exposición long/short (barras del panel inferior del gráfico principal cuando OI está activo)
-      se deriva de <em>openInterest × precio</em> ponderado por el ratio long/short del mismo timestamp.
+      Liquidaciones se muestran como línea de intensidad (USD). Funding rate en %, eje propio.
+      Exposición long/short se deriva de <em>openInterest × precio</em> ponderado por el ratio long/short del mismo timestamp.
     </div>
   </div>
 
@@ -198,7 +194,6 @@ footer a{color:var(--oi);}
    ========================================================================= */
 
 const BINANCE_FAPI = "https://fapi.binance.com";
-const BINANCE_SPOT = "https://api.binance.com";
 
 const CYCLES = [
   { id:"c1", label:"Ciclo 1", range:"2013 – 2016", start:"2013-01-01", end:"2016-01-01", live:false, peakCap:14,
@@ -225,6 +220,7 @@ const INDICATORS = [
   { id:"shortExp",   label:"Exposición Short",    color:"#f0909e" },
   { id:"liqLong",    label:"Liquidaciones Long",  color:"var(--liq-long)" },
   { id:"liqShort",   label:"Liquidaciones Short", color:"var(--liq-short)" },
+  { id:"fundingRate", label:"Funding Rate",       color:"#c99bff" },
 ];
 
 let state = {
@@ -232,8 +228,6 @@ let state = {
   timeframe: "1h",
   active: new Set(["price","oi","longRatio","shortRatio"]),
   mainChart: null,
-  depthSpotChart: null,
-  depthFutChart: null,
   liveSocket: null,
 };
 
@@ -355,31 +349,16 @@ async function fetchLiveLongShort(period, limit=500){
   }));
 }
 
-async function fetchDepth(base, symbol){
-  const url = `${base}/api/v3/depth?symbol=${symbol}&limit=100`.replace("/api/v3/depth", symbol.endsWith("USDT")&&base===BINANCE_FAPI?"/fapi/v1/depth":"/api/v3/depth");
-  // futures uses different path
-  const finalUrl = base===BINANCE_FAPI
-    ? `${BINANCE_FAPI}/fapi/v1/depth?symbol=${symbol}&limit=100`
-    : `${BINANCE_SPOT}/api/v3/depth?symbol=${symbol}&limit=100`;
-  const res = await fetch(finalUrl);
-  if(!res.ok) throw new Error("depth fetch failed");
-  return res.json();
-}
-
-function accumulateDepth(levels, mid, side){
-  // returns [{price, cum}] within +-3% of mid
-  const band = mid*0.03;
-  let cum = 0;
-  const out = [];
-  const arr = side==="bids" ? levels.slice().sort((a,b)=>b[0]-a[0]) : levels.slice().sort((a,b)=>a[0]-b[0]);
-  for(const [pStr,qStr] of arr){
-    const p = parseFloat(pStr), q = parseFloat(qStr);
-    if(side==="bids" && p < mid-band) break;
-    if(side==="asks" && p > mid+band) break;
-    cum += q;
-    out.push({ price:p, cum });
-  }
-  return out;
+async function fetchLiveFundingRate(limit=500){
+  // Funding se liquida cada 8hs, no hay "period" — siempre viene a esa cadencia natural.
+  const url = `${BINANCE_FAPI}/fapi/v1/fundingRate?symbol=BTCUSDT&limit=${limit}`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error("funding rate fetch failed");
+  const raw = await res.json();
+  return raw.map(r=>({
+    t: r.fundingTime,
+    fundingRate: parseFloat(r.fundingRate) * 100,
+  }));
 }
 
 /* ---------------- Illustrative generator (cycles 1-3) ---------------- */
@@ -443,17 +422,17 @@ async function loadDataForCurrentSelection(){
     statusEl.innerHTML = `<span class="dot-live"></span> Consultando Binance Futures API (público, sin key) — BTCUSDT · ${tf.toUpperCase()}…`;
     try{
       const interval = tfToBinanceInterval(tf);
-      const [klines, oiHist, lsHist] = await Promise.all([
+      const [klines, oiHist, lsHist, fundingHist] = await Promise.all([
         fetchLiveKlines(interval),
         fetchLiveOI(tf),
         fetchLiveLongShort(tf),
+        fetchLiveFundingRate(),
       ]);
-      const merged = mergeSeries(klines, oiHist, lsHist);
+      const merged = mergeSeries(klines, oiHist, lsHist, fundingHist);
       state.currentSeries = merged;
       statusEl.innerHTML = `<span class="dot-live"></span> en vivo — fuente: <a href="https://binance-docs.github.io/apidocs/futures/en/" target="_blank">Binance Futures public API</a> · sin API key · última vela ${new Date(merged.at(-1).t).toLocaleString()}`;
-      footer.textContent = `Precio/klines: fapi/v1/klines · Open Interest: futures/data/openInterestHist · Long/Short: futures/data/globalLongShortAccountRatio · Depth: fapi/v1/depth + api/v3/depth`;
+      footer.textContent = `Precio/klines: fapi/v1/klines · Open Interest: futures/data/openInterestHist · Long/Short: futures/data/globalLongShortAccountRatio · Liquidaciones: stream forceOrder (best-effort, en vivo)`;
       updateLivePrice(merged.at(-1).price, merged.at(-2)?.price);
-      loadDepth();
     }catch(err){
       statusEl.innerHTML = `⚠ no se pudo consultar Binance en vivo (${err.message}). Puede deberse a bloqueo de red del entorno — mostrando serie ilustrativa de respaldo.`;
       state.currentSeries = generateIllustrativeSeries(cycle, tf);
@@ -462,7 +441,6 @@ async function loadDataForCurrentSelection(){
     statusEl.innerHTML = `<span class="dot-static"></span> ${cycle.label} · buscando ${cycle.dataFile}…`;
     document.getElementById("livePrice").textContent = "—";
     document.getElementById("liveChg").textContent = "sin feed en vivo en este ciclo";
-    clearDepthCharts();
     try{
       state.staticCache = state.staticCache || {};
       if(!state.staticCache[cycle.id]){
@@ -487,7 +465,7 @@ async function loadDataForCurrentSelection(){
   renderMainChart();
 }
 
-function mergeSeries(klines, oiHist, lsHist){
+function mergeSeries(klines, oiHist, lsHist, fundingHist){
   // Align by nearest timestamp (Binance endpoints don't always share exact ticks)
   function nearest(arr, t){
     let best=arr[0], bestDiff=Infinity;
@@ -500,13 +478,15 @@ function mergeSeries(klines, oiHist, lsHist){
   return klines.map(k=>{
     const oi = oiHist.length ? nearest(oiHist,k.t) : null;
     const ls = lsHist.length ? nearest(lsHist,k.t) : null;
+    const fr = fundingHist && fundingHist.length ? nearest(fundingHist,k.t) : null;
     return {
       t:k.t,
       price:k.price,
       oi: oi ? oi.oi : null,
       longRatio: ls ? ls.longRatio : null,
       shortRatio: ls ? ls.shortRatio : null,
-      liqLong: null, liqShort: null, // live liquidation *history* isn't public; see note below
+      fundingRate: fr ? fr.fundingRate : null,
+      liqLong: null, liqShort: null, // liquidación histórica en vivo no es pública; ver stream forceOrder
     };
   });
 }
@@ -520,43 +500,6 @@ function updateLivePrice(last, prev){
     el.className = "px " + (pct>=0?"up":"down");
     chg.textContent = (pct>=0?"▲ ":"▼ ") + pct.toFixed(2) + "% vs vela anterior";
   }
-}
-
-/* ---------------- Depth (order book) ---------------- */
-
-async function loadDepth(){
-  try{
-    const [spot, fut] = await Promise.all([
-      fetchDepth(BINANCE_SPOT, "BTCUSDT"),
-      fetchDepth(BINANCE_FAPI, "BTCUSDT"),
-    ]);
-    renderDepthChart("depthSpot", spot, "spotDepthChart");
-    renderDepthChart("depthFut", fut, "futDepthChart");
-  }catch(err){
-    console.warn("depth fetch failed", err);
-  }
-}
-
-function renderDepthChart(canvasId, book, storeKey){
-  const mid = (parseFloat(book.bids[0][0]) + parseFloat(book.asks[0][0]))/2;
-  const bids = accumulateDepth(book.bids, mid, "bids");
-  const asks = accumulateDepth(book.asks, mid, "asks");
-  const ctx = document.getElementById(canvasId).getContext("2d");
-  if(state[storeKey]) state[storeKey].destroy();
-  state[storeKey] = new Chart(ctx, {
-    type:"line",
-    data:{
-      datasets:[
-        { label:"Bids", data:bids.slice().reverse().map(b=>({x:b.price,y:b.cum})), borderColor:"#3ecf8e", backgroundColor:"rgba(62,207,142,.15)", fill:true, stepped:true, pointRadius:0, borderWidth:1.5 },
-        { label:"Asks", data:asks.map(a=>({x:a.price,y:a.cum})), borderColor:"#e2596b", backgroundColor:"rgba(226,89,107,.15)", fill:true, stepped:true, pointRadius:0, borderWidth:1.5 },
-      ]
-    },
-    options: baseChartOptions({ xType:"linear", yLabel:"BTC acumulado" })
-  });
-}
-
-function clearDepthCharts(){
-  ["spotDepthChart","futDepthChart"].forEach(k=>{ if(state[k]){ state[k].destroy(); state[k]=null; }});
 }
 
 /* ---------------- Main chart ---------------- */
@@ -664,11 +607,21 @@ function renderMainChart(){
     });
   }
 
+  if(state.active.has("fundingRate")){
+    datasets.push({
+      label:"Funding Rate (%)", yAxisID:"yFunding",
+      data: series.map(p=>({x:p.t,y:p.fundingRate})),
+      borderColor:"#c99bff", backgroundColor:"transparent",
+      borderWidth:1.3, pointRadius:0, tension:0.1,
+    });
+  }
+
   const opts = baseChartOptions();
   opts.scales.yPrice = { position:"left", grid:{ color:"#161f29" }, ticks:{ color:"#dbe6ef", font:{ family:"ui-monospace, monospace", size:10 } }, title:{ display:true, text:"Precio USD", color:"#7c8ea1", font:{size:10} } };
   opts.scales.yOI = { position:"right", grid:{ display:false }, ticks:{ color:"#6fa8dc", font:{ family:"ui-monospace, monospace", size:10 } }, title:{ display:true, text:"OI / Exposición USD", color:"#6fa8dc", font:{size:10} } };
   opts.scales.yRatio = { position:"right", min:0, max:100, grid:{ display:false }, ticks:{ color:"#8fa4b5", font:{ family:"ui-monospace, monospace", size:10 } }, title:{ display:true, text:"Ratio %", color:"#8fa4b5", font:{size:10} } };
   opts.scales.yLiq = { display:false, position:"right" };
+  opts.scales.yFunding = { position:"right", grid:{ display:false }, ticks:{ color:"#c99bff", font:{ family:"ui-monospace, monospace", size:10 } }, title:{ display:true, text:"Funding %", color:"#c99bff", font:{size:10} } };
   delete opts.scales.y;
 
   const ctx = document.getElementById("mainChart").getContext("2d");
