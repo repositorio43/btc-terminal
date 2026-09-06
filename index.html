@@ -6,6 +6,8 @@
 <title>BTC · Terminal de ciclos</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@2.0.1/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
 <style>
 :root{
   --bg:#0a0e13;
@@ -117,6 +119,12 @@ body{padding:18px 32px;min-height:100vh;}
   margin:0 0 10px 0;font-weight:600;display:flex;justify-content:space-between;align-items:center;
 }
 .panel h2 span.hint{color:var(--ink-dim);font-weight:400;font-family:var(--data-font);font-size:11px;}
+.reset-zoom-btn{
+  background:var(--panel-2);border:1px solid var(--line);color:var(--ink-dim);
+  font-size:11px;font-family:var(--ui-font);padding:4px 10px;border-radius:3px;
+  cursor:pointer;flex:none;
+}
+.reset-zoom-btn:hover{color:var(--ink);border-color:#3a4a5c;}
 .chart-box{position:relative;height:420px;}
 .chart-box.small{height:220px;}
 
@@ -170,7 +178,10 @@ footer a{color:var(--oi);}
   <div class="status-line" id="statusLine"></div>
 
   <div class="panel">
-    <h2>Precio + indicadores <span class="hint" id="chartRangeHint"></span></h2>
+    <h2>
+      <span>Precio + indicadores <span class="hint" id="chartRangeHint"></span></span>
+      <button id="resetZoomBtn" class="reset-zoom-btn" title="Volver al zoom original">Reset zoom</button>
+    </h2>
     <div class="chart-box"><canvas id="mainChart"></canvas></div>
     <div class="legend-note">
       Ratio long y ratio short se grafican vinculados (short = 100 − long) sobre el mismo eje derecho, 0–100%.
@@ -504,7 +515,21 @@ function updateLivePrice(last, prev){
 
 /* ---------------- Main chart ---------------- */
 
-function baseChartOptions({ xType="time", yLabel="" }={}){
+function smoothSeries(points, windowSize=5){
+  // Media móvil centrada — suaviza ruido punto a punto sin inventar tendencia.
+  // Se aplica solo para visualización (no altera los datos guardados/exportables).
+  const half = Math.floor(windowSize/2);
+  return points.map((p,i)=>{
+    let sum=0, count=0;
+    for(let j=Math.max(0,i-half); j<=Math.min(points.length-1,i+half); j++){
+      const v = points[j].y;
+      if(v!=null && !isNaN(v)){ sum+=v; count++; }
+    }
+    return { x:p.x, y: count ? sum/count : null };
+  });
+}
+
+function baseChartOptions({ xType="time", yLabel="", zoomable=true }={}){
   return {
     responsive:true, maintainAspectRatio:false,
     animation:{ duration:300 },
@@ -516,7 +541,18 @@ function baseChartOptions({ xType="time", yLabel="" }={}){
         titleColor:"#dbe6ef", bodyColor:"#dbe6ef", padding:10,
         titleFont:{ family:"ui-monospace, monospace", size:11 },
         bodyFont:{ family:"ui-monospace, monospace", size:11 },
-      }
+        filter: (item)=> item.dataset.label !== "0%",
+      },
+      zoom: zoomable ? {
+        pan:{ enabled:true, mode:"xy", modifierKey:null },
+        zoom:{
+          wheel:{ enabled:true, speed:0.08 },
+          pinch:{ enabled:true },
+          drag:{ enabled:false },
+          mode:"xy",
+        },
+        limits:{ x:{ min:"original", max:"original" }, y:{ min:"original", max:"original" } },
+      } : undefined,
     },
     scales:{
       x:{
@@ -608,11 +644,22 @@ function renderMainChart(){
   }
 
   if(state.active.has("fundingRate")){
+    // línea de referencia en 0%, punteada, gris clara, dibujada antes que el dato real
+    if(series.length){
+      datasets.push({
+        label:"0%", yAxisID:"yFunding",
+        data: [{x:series[0].t,y:0}, {x:series[series.length-1].t,y:0}],
+        borderColor:"#4a5568", backgroundColor:"transparent",
+        borderWidth:1, borderDash:[4,4], pointRadius:0, tension:0,
+        order:0,
+      });
+    }
     datasets.push({
       label:"Funding Rate (%)", yAxisID:"yFunding",
-      data: series.map(p=>({x:p.t,y:p.fundingRate})),
+      data: smoothSeries(series.map(p=>({x:p.t,y:p.fundingRate})), 5),
       borderColor:"#c99bff", backgroundColor:"transparent",
-      borderWidth:1.3, pointRadius:0, tension:0.1,
+      borderWidth:1.5, pointRadius:0, tension:0.35,
+      order:1,
     });
   }
 
@@ -633,6 +680,9 @@ function renderMainChart(){
 buildCycleSelector();
 buildIndicatorChips();
 onCycleChange();
+document.getElementById("resetZoomBtn").addEventListener("click", ()=>{
+  if(state.mainChart) state.mainChart.resetZoom();
+});
 </script>
 </body>
 </html>
