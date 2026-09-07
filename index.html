@@ -27,22 +27,22 @@
 }
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:var(--ui-font);}
-body{padding:18px 32px;min-height:100vh;}
+body{padding:28px 36px;min-height:100vh;}
 
 .wrap{max-width:1800px;margin:0 auto;}
 
 @media(max-width:900px){
-  body{padding:12px;}
+  body{padding:14px;}
 }
 
 /* ---------- header ---------- */
 .hero{
   display:flex;justify-content:space-between;align-items:flex-end;
-  gap:16px;flex-wrap:wrap;margin-bottom:16px;padding-bottom:14px;
+  gap:16px;flex-wrap:wrap;margin-bottom:24px;padding-bottom:18px;
   border-bottom:1px solid var(--line);
 }
 .hero h1{
-  font-size:22px;font-weight:600;margin:0 0 4px 0;letter-spacing:0.2px;
+  font-size:23px;font-weight:600;margin:0 0 6px 0;letter-spacing:0.2px;
 }
 .hero .sub{color:var(--ink-dim);font-size:13px;font-family:var(--data-font);}
 .price-live{
@@ -60,18 +60,18 @@ body{padding:18px 32px;min-height:100vh;}
 }
 
 /* ---------- cycle selector ---------- */
-.cycles{display:flex;gap:8px;margin:16px 0;flex-wrap:wrap;}
+.cycles{display:flex;gap:14px;margin:22px 0;flex-wrap:wrap;}
 .cycle-btn{
-  flex:1;min-width:150px;background:var(--panel);border:1px solid var(--line);
-  color:var(--ink-dim);padding:10px 14px;border-radius:3px;cursor:pointer;
+  flex:1;min-width:190px;background:var(--panel);border:1px solid var(--line);
+  color:var(--ink-dim);padding:16px 20px;border-radius:5px;cursor:pointer;
   font-family:var(--ui-font);font-size:13px;text-align:left;transition:border-color .15s,color .15s;
 }
-.cycle-btn strong{display:block;font-size:14px;color:var(--ink);font-weight:600;margin-bottom:2px;}
+.cycle-btn strong{display:block;font-size:15px;color:var(--ink);font-weight:600;margin-bottom:6px;}
 .cycle-btn:hover{border-color:#3a4a5c;}
 .cycle-btn.active{border-color:var(--amber);color:var(--ink);background:#181109;}
 .cycle-btn.active strong{color:var(--amber);}
 .cycle-btn .badge{
-  display:inline-block;margin-top:5px;font-size:10px;padding:1px 6px;border-radius:2px;
+  display:inline-block;margin-top:8px;font-size:10.5px;padding:3px 9px;border-radius:3px;
   background:#1b2733;color:var(--ink-dim);
 }
 .cycle-btn.active .badge.live{background:#123023;color:var(--liq-long);}
@@ -79,20 +79,20 @@ body{padding:18px 32px;min-height:100vh;}
 
 /* ---------- controls row ---------- */
 .controls{
-  display:flex;justify-content:space-between;align-items:center;gap:16px;
-  flex-wrap:wrap;margin-bottom:12px;
+  display:flex;justify-content:space-between;align-items:center;gap:20px;
+  flex-wrap:wrap;margin-bottom:18px;
 }
-.tf-select{display:flex;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:3px;}
+.tf-select{display:flex;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:4px;}
 .tf-select button{
-  background:transparent;border:none;color:var(--ink-dim);padding:6px 14px;border-radius:2px;
-  cursor:pointer;font-family:var(--data-font);font-size:12px;
+  background:transparent;border:none;color:var(--ink-dim);padding:9px 18px;border-radius:3px;
+  cursor:pointer;font-family:var(--data-font);font-size:12.5px;
 }
 .tf-select button.active{background:var(--amber);color:#1a1206;font-weight:600;}
 
-.indicators{display:flex;gap:6px;flex-wrap:wrap;}
+.indicators{display:flex;gap:9px;flex-wrap:wrap;}
 .chip{
-  display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);
-  border-radius:3px;padding:6px 10px;cursor:pointer;font-size:12px;color:var(--ink-dim);
+  display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);
+  border-radius:4px;padding:9px 14px;cursor:pointer;font-size:12.5px;color:var(--ink-dim);
   user-select:none;
 }
 .chip .dot{width:9px;height:9px;border-radius:50%;flex:none;}
@@ -101,8 +101,8 @@ body{padding:18px 32px;min-height:100vh;}
 
 /* ---------- status ---------- */
 .status-line{
-  font-family:var(--data-font);font-size:11px;color:var(--ink-dim);margin-bottom:10px;
-  display:flex;gap:14px;align-items:center;flex-wrap:wrap;
+  font-family:var(--data-font);font-size:11.5px;color:var(--ink-dim);margin-bottom:16px;
+  display:flex;gap:16px;align-items:center;flex-wrap:wrap;
 }
 .status-line .dot-live{width:7px;height:7px;border-radius:50%;background:var(--liq-long);display:inline-block;
   box-shadow:0 0 6px var(--liq-long);}
@@ -111,21 +111,21 @@ body{padding:18px 32px;min-height:100vh;}
 
 /* ---------- panels ---------- */
 .panel{
-  background:var(--panel);border:1px solid var(--line);border-radius:4px;
-  padding:14px;margin-bottom:14px;
+  background:var(--panel);border:1px solid var(--line);border-radius:5px;
+  padding:22px 24px;margin-bottom:22px;
 }
 .panel h2{
-  font-size:12px;text-transform:none;letter-spacing:.3px;color:var(--ink-dim);
-  margin:0 0 10px 0;font-weight:600;display:flex;justify-content:space-between;align-items:center;
+  font-size:12.5px;text-transform:none;letter-spacing:.3px;color:var(--ink-dim);
+  margin:0 0 16px 0;font-weight:600;display:flex;justify-content:space-between;align-items:center;
 }
 .panel h2 span.hint{color:var(--ink-dim);font-weight:400;font-family:var(--data-font);font-size:11px;}
 .reset-zoom-btn{
   background:var(--panel-2);border:1px solid var(--line);color:var(--ink-dim);
-  font-size:11px;font-family:var(--ui-font);padding:4px 10px;border-radius:3px;
+  font-size:11px;font-family:var(--ui-font);padding:6px 14px;border-radius:4px;
   cursor:pointer;flex:none;
 }
 .reset-zoom-btn:hover{color:var(--ink);border-color:#3a4a5c;}
-.chart-box{position:relative;height:420px;}
+.chart-box{position:relative;height:420px;margin-bottom:6px;}
 .chart-box.small{height:220px;}
 
 @media(min-width:1500px){
@@ -136,15 +136,42 @@ body{padding:18px 32px;min-height:100vh;}
 }
 
 .legend-note{
-  font-size:11px;color:var(--ink-dim);margin-top:8px;font-family:var(--data-font);
-  border-top:1px solid var(--line);padding-top:8px;
-}
-.illus-banner{
-  background:#1c1509;border:1px solid #4a3512;color:var(--amber);font-size:12px;
-  padding:9px 12px;border-radius:3px;margin-bottom:14px;font-family:var(--ui-font);
+  font-size:11.5px;color:var(--ink-dim);margin-top:16px;font-family:var(--data-font);
+  border-top:1px solid var(--line);padding-top:16px;line-height:1.6;
 }
 
-footer{color:var(--ink-dim);font-size:11px;text-align:center;padding:18px 0 4px;font-family:var(--data-font);}
+/* ---------- Bitfinex margin panel ---------- */
+.bf-layout{display:grid;grid-template-columns:1fr 240px;gap:24px;align-items:stretch;}
+@media(max-width:800px){ .bf-layout{grid-template-columns:1fr;} }
+.bf-cards{display:flex;flex-direction:column;gap:16px;justify-content:center;}
+.bf-card{
+  border:2px dashed var(--bf-color);border-radius:6px;padding:18px 20px;
+  background:rgba(255,255,255,0.02);
+}
+.bf-card-title{font-family:var(--data-font);font-size:12.5px;color:var(--ink);margin-bottom:8px;letter-spacing:.3px;}
+.bf-card-value{font-family:var(--data-font);font-size:17px;font-weight:600;color:var(--bf-color);}
+.bf-card-caption{font-family:var(--data-font);font-size:10.5px;color:var(--ink-dim);margin-top:6px;}
+.bf-long{--bf-color:#00e5cc;}
+.bf-short{--bf-color:#ff3fa4;}
+
+.illus-banner{
+  background:#1c1509;border:1px solid #4a3512;color:var(--amber);font-size:12.5px;
+  padding:14px 18px;border-radius:4px;margin-bottom:22px;font-family:var(--ui-font);line-height:1.6;
+}
+
+footer{color:var(--ink-dim);font-size:11.5px;text-align:left;padding:26px 0 12px;font-family:var(--data-font);}
+.sources-list{
+  display:grid;grid-template-columns:auto 1fr;gap:6px 16px;
+  max-width:900px;margin:0 auto;
+}
+.sources-row{display:contents;}
+.src-label{color:var(--amber);white-space:nowrap;}
+.src-val{color:var(--ink-dim);}
+@media(max-width:640px){
+  .sources-list{grid-template-columns:1fr;gap:2px 0;}
+  .sources-row{display:block;margin-bottom:8px;}
+  .src-label{display:block;}
+}
 footer a{color:var(--oi);}
 </style>
 </head>
@@ -190,6 +217,33 @@ footer a{color:var(--oi);}
     </div>
   </div>
 
+  <div class="panel">
+    <h2>
+      <span>Bitfinex · Posiciones Margin Long/Short <span class="hint">últimas 200 barras</span></span>
+    </h2>
+    <div id="bitfinexStatus" class="status-line" style="margin-bottom:10px;"></div>
+    <div class="bf-layout">
+      <div class="chart-box small"><canvas id="bitfinexChart"></canvas></div>
+      <div class="bf-cards">
+        <div class="bf-card bf-long">
+          <div class="bf-card-title">L BTCUSD</div>
+          <div class="bf-card-value" id="bfLongValue">—</div>
+          <div class="bf-card-caption">200 bars</div>
+        </div>
+        <div class="bf-card bf-short">
+          <div class="bf-card-title">S BTCUSD</div>
+          <div class="bf-card-value" id="bfShortValue">—</div>
+          <div class="bf-card-caption">200 bars</div>
+        </div>
+      </div>
+    </div>
+    <div class="legend-note">
+      Tamaño total de posiciones abiertas con margin en Bitfinex para BTC/USD — no es lo mismo que el long/short ratio
+      de cuentas de futuros de Binance que se ve arriba; es otro mercado (margin spot, no perpetuo) y otro exchange,
+      pensado para contrastar. Dato en vivo, no tiene versión histórica precargada por ciclo.
+    </div>
+  </div>
+
   <footer id="dataFooter"></footer>
 </div>
 
@@ -205,12 +259,10 @@ footer a{color:var(--oi);}
    ========================================================================= */
 
 const BINANCE_FAPI = "https://fapi.binance.com";
+const BITFINEX_API = "https://api-pub.bitfinex.com/v2";
+const BITFINEX_TF_MAP = { "1h":"1h", "1d":"1D", "1w":"7D" };
 
 const CYCLES = [
-  { id:"c1", label:"Ciclo 1", range:"2013 – 2016", start:"2013-01-01", end:"2016-01-01", live:false, peakCap:14,
-    dataFile:"data/c1.json", timeframes:["1d","1w"] },
-  { id:"c2", label:"Ciclo 2", range:"2016 – 2020", start:"2016-01-01", end:"2020-01-01", live:false, peakCap:330,
-    dataFile:"data/c2.json", timeframes:["1d","1w"] },
   { id:"c3", label:"Ciclo 3", range:"2020 – 2024", start:"2020-01-01", end:"2024-01-01", live:false, peakCap:1280,
     dataFile:"data/c3.json", timeframes:["1h","1d","1w"] },
   { id:"c4", label:"Ciclo 4", range:"2024 – actualidad", start:"2024-01-01", end:null, live:true, peakCap:2200,
@@ -218,8 +270,8 @@ const CYCLES = [
 ];
 // dataFile: JSON estático generado por scripts/build_historical_data.py (ver README).
 // Formato esperado: { "1h": [...] | null, "1d": [...], "1w": [...] }
-// Cada punto: { t, price, oi, longRatio, shortRatio, liqLong, liqShort } — los campos
-// no disponibles para ese ciclo (ej. OI en c1/c2) vienen en null y el front simplemente
+// Cada punto: { t, price, oi, longRatio, shortRatio, liqLong, liqShort, fundingRate } — los
+// campos no disponibles para ese ciclo (ej. OI en c2) vienen en null y el front simplemente
 // no dibuja esa línea.
 
 const INDICATORS = [
@@ -232,10 +284,11 @@ const INDICATORS = [
   { id:"liqLong",    label:"Liquidaciones Long",  color:"var(--liq-long)" },
   { id:"liqShort",   label:"Liquidaciones Short", color:"var(--liq-short)" },
   { id:"fundingRate", label:"Funding Rate",       color:"#c99bff" },
+  { id:"fundingPredicted", label:"Funding Predicho (en vivo)", color:"#ff2ec4" },
 ];
 
 let state = {
-  cycle: CYCLES[3],
+  cycle: CYCLES[1],
   timeframe: "1h",
   active: new Set(["price","oi","longRatio","shortRatio"]),
   mainChart: null,
@@ -303,6 +356,7 @@ document.getElementById("tfSelector").addEventListener("click", (e)=>{
   state.timeframe = btn.dataset.tf;
   syncTfButtons();
   loadDataForCurrentSelection();
+  loadBitfinexMargin();
 });
 
 function onCycleChange(){
@@ -372,6 +426,18 @@ async function fetchLiveFundingRate(limit=500){
   }));
 }
 
+async function fetchLivePredictedFunding(){
+  // premiumIndex.lastFundingRate es, pese al nombre, la tasa PREDICHA para el
+  // próximo cierre — se recalcula en tiempo real hasta que llega el momento
+  // de liquidar, ahí pasa a ser la "realizada". No hay histórico de esto,
+  // solo el valor actual.
+  const url = `${BINANCE_FAPI}/fapi/v1/premiumIndex?symbol=BTCUSDT`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error("premiumIndex fetch failed");
+  const raw = await res.json();
+  return { t: raw.time, fundingRate: parseFloat(raw.lastFundingRate) * 100 };
+}
+
 /* ---------------- Illustrative generator (cycles 1-3) ---------------- */
 // Deterministic pseudo-random so the shape is stable across reloads/toggles.
 function seeded(seedStr){
@@ -424,6 +490,12 @@ function generateIllustrativeSeries(cycle, tf){
 
 /* ---------------- Load + render orchestration ---------------- */
 
+function renderSourcesList(pairs){
+  return `<div class="sources-list">` +
+    pairs.map(([label,val])=>`<div class="sources-row"><span class="src-label">${label}</span><span class="src-val">${val}</span></div>`).join("") +
+    `</div>`;
+}
+
 async function loadDataForCurrentSelection(){
   const statusEl = document.getElementById("statusLine");
   const footer = document.getElementById("dataFooter");
@@ -441,8 +513,16 @@ async function loadDataForCurrentSelection(){
       ]);
       const merged = mergeSeries(klines, oiHist, lsHist, fundingHist);
       state.currentSeries = merged;
-      statusEl.innerHTML = `<span class="dot-live"></span> en vivo — fuente: <a href="https://binance-docs.github.io/apidocs/futures/en/" target="_blank">Binance Futures public API</a> · sin API key · última vela ${new Date(merged.at(-1).t).toLocaleString()}`;
-      footer.textContent = `Precio/klines: fapi/v1/klines · Open Interest: futures/data/openInterestHist · Long/Short: futures/data/globalLongShortAccountRatio · Liquidaciones: stream forceOrder (best-effort, en vivo)`;
+      fetchLivePredictedFunding().then(p=>{ state.predictedFunding = p; renderMainChart(); }).catch(()=>{ state.predictedFunding = null; });
+      statusEl.innerHTML = `<span class="dot-live"></span> en vivo — fuente: <a href="https://binance-docs.github.io/apidocs/futures/en/" target="_blank">Binance Futures public API</a> · sin API key · última vela ${new Date(merged.at(-1).t).toLocaleString()} · se refresca solo cada 30s`;
+      footer.innerHTML = renderSourcesList([
+        ["Precio / klines", "Binance fapi/v1/klines"],
+        ["Open Interest", "Binance futures/data/openInterestHist"],
+        ["Ratio Long/Short", "Binance futures/data/globalLongShortAccountRatio"],
+        ["Liquidaciones", "stream forceOrder de Binance (best-effort, solo eventos en vivo)"],
+        ["Funding Rate", "Binance fapi/v1/fundingRate (realizado) + fapi/v1/premiumIndex (predicho, un punto)"],
+        ["Bitfinex Long/Short margin", "api-pub.bitfinex.com/v2/stats1 (últimas 200 barras)"],
+      ]);
       updateLivePrice(merged.at(-1).price, merged.at(-2)?.price);
     }catch(err){
       statusEl.innerHTML = `⚠ no se pudo consultar Binance en vivo (${err.message}). Puede deberse a bloqueo de red del entorno — mostrando serie ilustrativa de respaldo.`;
@@ -450,6 +530,7 @@ async function loadDataForCurrentSelection(){
     }
   } else {
     statusEl.innerHTML = `<span class="dot-static"></span> ${cycle.label} · buscando ${cycle.dataFile}…`;
+    state.predictedFunding = null;
     document.getElementById("livePrice").textContent = "—";
     document.getElementById("liveChg").textContent = "sin feed en vivo en este ciclo";
     try{
@@ -462,10 +543,16 @@ async function loadDataForCurrentSelection(){
       const seriesForTf = state.staticCache[cycle.id][tf];
       if(!seriesForTf || !seriesForTf.length) throw new Error(`sin datos "${tf}" en el archivo`);
       state.currentSeries = seriesForTf;
-      statusEl.innerHTML = `<span class="dot-static"></span> ${cycle.label} · histórico real precargado — fuente: data.binance.vision (OI/long-short) + CoinGecko (precio)${state.staticCache[cycle.id].generatedAt ? " · generado " + state.staticCache[cycle.id].generatedAt : ""}`;
-      footer.textContent = `Archivo: ${cycle.dataFile} — regenerable con scripts/build_historical_data.py`;
+      statusEl.innerHTML = `<span class="dot-static"></span> ${cycle.label} · histórico real precargado`;
+      footer.innerHTML = renderSourcesList([
+        ["Archivo", `${cycle.dataFile} — regenerable con scripts/build_historical_data.mjs`],
+        ["Precio", "CSV público en GitHub (ff137/bitstamp-btcusd-minute-data, Bitstamp 1-min desde 2012)"],
+        ["Open Interest / Long-Short", "data.binance.vision futures/um/daily/metrics"],
+        ["Liquidaciones", "data.binance.vision futures/um/daily/liquidationSnapshot"],
+        ["Funding Rate", "data.binance.vision futures/um/monthly/fundingRate"],
+      ]);
     }catch(err){
-      statusEl.innerHTML = `⚠ ${cycle.dataFile} no disponible todavía (${err.message}) — corré <code>python scripts/build_historical_data.py</code> y volvé a desplegar. Mostrando serie ilustrativa de respaldo mientras tanto.`;
+      statusEl.innerHTML = `⚠ ${cycle.dataFile} no disponible todavía (${err.message}) — corré <code>node scripts/build_historical_data.mjs</code> y volvé a desplegar. Mostrando serie ilustrativa de respaldo mientras tanto.`;
       footer.textContent = `Para generar el histórico real: ver README.md → "Generar los datos".`;
       state.currentSeries = generateIllustrativeSeries(cycle, tf);
     }
@@ -663,6 +750,24 @@ function renderMainChart(){
     });
   }
 
+  if(state.active.has("fundingPredicted") && state.predictedFunding){
+    // Solo existe "ahora" — no hay histórico de la tasa predicha, por diseño
+    // (es un valor instantáneo que se recalcula todo el tiempo). La conectamos
+    // con el último punto realizado para que se entienda hacia dónde apunta.
+    const lastReal = [...series].reverse().find(p=>p.fundingRate!=null);
+    const endPoint = { x: state.predictedFunding.t, y: state.predictedFunding.fundingRate };
+    const data = lastReal ? [{x:lastReal.t,y:lastReal.fundingRate}, endPoint] : [endPoint];
+    datasets.push({
+      label:"Funding Predicho (%)", yAxisID:"yFunding",
+      data,
+      borderColor:"#ff2ec4", backgroundColor:"#ff2ec4",
+      borderWidth:2, borderDash:[3,3], tension:0,
+      pointRadius: data.length>1 ? [0,5] : 5,
+      pointBackgroundColor:"#ff2ec4", pointBorderColor:"#ffffff", pointBorderWidth:1,
+      order:2,
+    });
+  }
+
   const opts = baseChartOptions();
   opts.scales.yPrice = { position:"left", grid:{ color:"#161f29" }, ticks:{ color:"#dbe6ef", font:{ family:"ui-monospace, monospace", size:10 } }, title:{ display:true, text:"Precio USD", color:"#7c8ea1", font:{size:10} } };
   opts.scales.yOI = { position:"right", grid:{ display:false }, ticks:{ color:"#6fa8dc", font:{ family:"ui-monospace, monospace", size:10 } }, title:{ display:true, text:"OI / Exposición USD", color:"#6fa8dc", font:{size:10} } };
@@ -674,6 +779,105 @@ function renderMainChart(){
   const ctx = document.getElementById("mainChart").getContext("2d");
   if(state.mainChart) state.mainChart.destroy();
   state.mainChart = new Chart(ctx, { type:"line", data:{ datasets }, options: opts });
+  attachAxisZoom(state.mainChart, ctx.canvas);
+}
+
+/* Ctrl + rueda del mouse sobre el área de un eje = zoom SOLO de ese eje.
+   Rueda normal (sin Ctrl) dentro del gráfico = zoom xy general (lo maneja el plugin).
+   Usamos state.mainChart en vivo (no un parámetro cerrado) porque el chart se
+   destruye y recrea en cada render, pero el listener del canvas se agrega una sola vez. */
+function attachAxisZoom(chart, canvas){
+  if(canvas._axisZoomAttached) return; // evita duplicar el listener entre renders
+  canvas._axisZoomAttached = true;
+  canvas.addEventListener("wheel", (e)=>{
+    const liveChart = state.mainChart;
+    if(!liveChart || !e.ctrlKey) return; // sin Ctrl, dejamos pasar el evento al plugin (zoom xy normal)
+    const rect = canvas.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    const area = liveChart.chartArea;
+    if(!area) return;
+
+    let targetId = null;
+    if(py > area.bottom && py < rect.height){
+      targetId = "x";
+    } else if(px < area.left || px > area.right){
+      for(const id in liveChart.scales){
+        const s = liveChart.scales[id];
+        if(s.axis === "y" && px >= s.left - 2 && px <= s.right + 2){ targetId = id; break; }
+      }
+    }
+    if(!targetId) return; // Ctrl+wheel pero no está sobre ningún eje -> dejamos pasar tal cual
+
+    e.preventDefault();       // frena el zoom nativo del navegador (Ctrl+wheel)
+    e.stopPropagation();      // evita que el plugin de zoom general también procese este mismo evento
+    const scale = liveChart.scales[targetId];
+    const factor = e.deltaY < 0 ? 0.85 : 1.15; // arriba = acercar, abajo = alejar
+    const pivotPixel = targetId === "x" ? px : py;
+    const pivotValue = scale.getValueForPixel(pivotPixel);
+    const newMin = pivotValue - (pivotValue - scale.min) * factor;
+    const newMax = pivotValue + (scale.max - pivotValue) * factor;
+    liveChart.zoomScale(targetId, { min:newMin, max:newMax }, "zoom");
+  }, { capture:true, passive:false }); // capture:true -> corre ANTES que el listener interno del plugin
+}
+
+/* ---------------- Bitfinex margin long/short ---------------- */
+
+async function fetchBitfinexMarginSide(side, tf){
+  const key = BITFINEX_TF_MAP[tf] || "1D";
+  const url = `${BITFINEX_API}/stats1/pos.size:${key}:tBTCUSD:${side}/hist?limit=200`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error(`HTTP ${res.status}`);
+  const raw = await res.json(); // [[MTS, value], ...] viene más nuevo primero
+  return raw.map(r=>({ t:r[0], value:r[1] })).sort((a,b)=>a.t-b.t);
+}
+
+function formatSigned(n, decimals){
+  const s = n>=0 ? "+" : "";
+  return s + n.toFixed(decimals);
+}
+
+function renderBitfinexCard(elId, label, points){
+  const el = document.getElementById(elId);
+  if(!points || points.length<2){ el.textContent = "—"; return; }
+  const last = points[points.length-1].value;
+  const prev = points[points.length-2].value;
+  const delta = last - prev;
+  const pct = prev !== 0 ? (delta/Math.abs(prev))*100 : 0;
+  const decimals = Math.abs(delta) >= 10 ? 0 : 2;
+  el.textContent = `${label}: ${formatSigned(delta,decimals)} (${formatSigned(pct,3)}%)`;
+}
+
+function renderBitfinexChart(longs, shorts){
+  const ctx = document.getElementById("bitfinexChart").getContext("2d");
+  if(state.bitfinexChart) state.bitfinexChart.destroy();
+  const opts = baseChartOptions({ zoomable:false });
+  opts.scales.y = { position:"left", grid:{ color:"#161f29" }, ticks:{ color:"#7c8ea1", font:{ family:"ui-monospace, monospace", size:10 } }, title:{ display:true, text:"Tamaño posición (BTC)", color:"#7c8ea1", font:{size:10} } };
+  state.bitfinexChart = new Chart(ctx, {
+    type:"line",
+    data:{ datasets:[
+      { label:"Long", data: longs.map(p=>({x:p.t,y:p.value})), borderColor:"#00e5cc", backgroundColor:"transparent", borderWidth:1.6, pointRadius:0, tension:0.15 },
+      { label:"Short", data: shorts.map(p=>({x:p.t,y:p.value})), borderColor:"#ff3fa4", backgroundColor:"transparent", borderWidth:1.6, pointRadius:0, tension:0.15 },
+    ]},
+    options: opts,
+  });
+}
+
+async function loadBitfinexMargin(){
+  const statusEl = document.getElementById("bitfinexStatus");
+  statusEl.innerHTML = `<span class="dot-live"></span> consultando Bitfinex (público, sin key)…`;
+  try{
+    const [longs, shorts] = await Promise.all([
+      fetchBitfinexMarginSide("long", state.timeframe),
+      fetchBitfinexMarginSide("short", state.timeframe),
+    ]);
+    renderBitfinexChart(longs, shorts);
+    renderBitfinexCard("bfLongValue", "L BTCUSD", longs);
+    renderBitfinexCard("bfShortValue", "S BTCUSD", shorts);
+    statusEl.innerHTML = `<span class="dot-live"></span> en vivo — fuente: <a href="https://docs.bitfinex.com/reference/rest-public-stats" target="_blank">Bitfinex public API</a> · sin API key`;
+  }catch(err){
+    statusEl.innerHTML = `⚠ no se pudo consultar Bitfinex (${err.message}) — puede ser bloqueo de red del entorno.`;
+  }
 }
 
 /* ---------------- boot ---------------- */
@@ -683,6 +887,14 @@ onCycleChange();
 document.getElementById("resetZoomBtn").addEventListener("click", ()=>{
   if(state.mainChart) state.mainChart.resetZoom();
 });
+loadBitfinexMargin();
+
+// Auto-refresh cada 30s: solo recarga el ciclo en vivo (no tiene sentido
+// refrescar datos históricos que no cambian) y siempre el panel de Bitfinex.
+setInterval(()=>{
+  if(state.cycle.live) loadDataForCurrentSelection();
+  loadBitfinexMargin();
+}, 30000);
 </script>
 </body>
 </html>
