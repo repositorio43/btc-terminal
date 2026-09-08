@@ -219,7 +219,7 @@ footer a{color:var(--oi);}
 
   <div class="panel">
     <h2>
-      <span>Bitfinex · Posiciones Margin Long/Short <span class="hint">últimas 200 barras</span></span>
+      <span>Bitfinex · Posiciones Margin Long/Short <span class="hint">últimas 200 velas de 1 min</span></span>
     </h2>
     <div id="bitfinexStatus" class="status-line" style="margin-bottom:10px;"></div>
     <div class="bf-layout">
@@ -260,7 +260,6 @@ footer a{color:var(--oi);}
 
 const BINANCE_FAPI = "https://fapi.binance.com";
 const BITFINEX_API = "https://api-pub.bitfinex.com/v2";
-const BITFINEX_TF_MAP = { "1h":"1h", "1d":"1D", "1w":"7D" };
 
 const CYCLES = [
   { id:"c3", label:"Ciclo 3", range:"2020 – 2024", start:"2020-01-01", end:"2024-01-01", live:false, peakCap:1280,
@@ -343,7 +342,7 @@ function buildIndicatorChips(){
       chip.onclick = ()=>{
         if(state.active.has(ind.id)) state.active.delete(ind.id); else state.active.add(ind.id);
         buildIndicatorChips();
-        renderMainChart();
+        refreshMainChartData();
       };
     }
     el.appendChild(chip);
@@ -356,7 +355,6 @@ document.getElementById("tfSelector").addEventListener("click", (e)=>{
   state.timeframe = btn.dataset.tf;
   syncTfButtons();
   loadDataForCurrentSelection();
-  loadBitfinexMargin();
 });
 
 function onCycleChange(){
@@ -496,7 +494,7 @@ function renderSourcesList(pairs){
     `</div>`;
 }
 
-async function loadDataForCurrentSelection(){
+async function loadDataForCurrentSelection(isAutoRefresh=false){
   const statusEl = document.getElementById("statusLine");
   const footer = document.getElementById("dataFooter");
   const cycle = state.cycle, tf = state.timeframe;
@@ -513,7 +511,7 @@ async function loadDataForCurrentSelection(){
       ]);
       const merged = mergeSeries(klines, oiHist, lsHist, fundingHist);
       state.currentSeries = merged;
-      fetchLivePredictedFunding().then(p=>{ state.predictedFunding = p; renderMainChart(); }).catch(()=>{ state.predictedFunding = null; });
+      fetchLivePredictedFunding().then(p=>{ state.predictedFunding = p; refreshMainChartData(); }).catch(()=>{ state.predictedFunding = null; });
       statusEl.innerHTML = `<span class="dot-live"></span> en vivo — fuente: <a href="https://binance-docs.github.io/apidocs/futures/en/" target="_blank">Binance Futures public API</a> · sin API key · última vela ${new Date(merged.at(-1).t).toLocaleString()} · se refresca solo cada 30s`;
       footer.innerHTML = renderSourcesList([
         ["Precio / klines", "Binance fapi/v1/klines"],
@@ -560,7 +558,7 @@ async function loadDataForCurrentSelection(){
 
   document.getElementById("chartRangeHint").textContent =
     `${cycle.range} · ${tf.toUpperCase()} · ${state.currentSeries.length} velas`;
-  renderMainChart();
+  if(isAutoRefresh) refreshMainChartData(); else renderMainChart();
 }
 
 function mergeSeries(klines, oiHist, lsHist, fundingHist){
@@ -657,11 +655,21 @@ function baseChartOptions({ xType="time", yLabel="", zoomable=true }={}){
   };
 }
 
-function renderMainChart(){
-  const series = state.currentSeries || [];
-  const labels = series.map(p=>p.t);
-
+function buildMainDatasets(series){
   const datasets = [];
+
+  if(series.length){
+    const lastPrice = series[series.length-1].price;
+    const barMs = { "1h":3600e3, "1d":86400e3, "1w":7*86400e3 }[state.timeframe] || 86400e3;
+    const xEnd = series[series.length-1].t + barMs * RIGHT_MARGIN_BARS;
+    datasets.push({
+      label:"Precio actual", yAxisID:"yPrice",
+      data: [{x:series[0].t,y:lastPrice}, {x:xEnd,y:lastPrice}],
+      borderColor:"var(--amber)", backgroundColor:"transparent",
+      borderWidth:1, borderDash:[3,3], pointRadius:0, tension:0,
+      order:-1,
+    });
+  }
 
   datasets.push({
     label:"Precio (USD)", yAxisID:"yPrice",
@@ -768,18 +776,51 @@ function renderMainChart(){
     });
   }
 
+  return datasets;
+}
+
+const RIGHT_MARGIN_BARS = 8; // espacio libre a la derecha del último dato, en barras del timeframe activo
+
+function buildMainScales(series){
+  const scales = {};
+  scales.yPrice = { position:"left", grid:{ color:"#161f29" }, ticks:{ color:"#dbe6ef", font:{ family:"ui-monospace, monospace", size:10 } }, title:{ display:true, text:"Precio USD", color:"#7c8ea1", font:{size:10} } };
+  scales.yOI = { position:"right", grid:{ display:false }, ticks:{ color:"#6fa8dc", font:{ family:"ui-monospace, monospace", size:10 } }, title:{ display:true, text:"OI / Exposición USD", color:"#6fa8dc", font:{size:10} } };
+  scales.yRatio = { position:"right", min:0, max:100, grid:{ display:false }, ticks:{ color:"#8fa4b5", font:{ family:"ui-monospace, monospace", size:10 } }, title:{ display:true, text:"Ratio %", color:"#8fa4b5", font:{size:10} } };
+  scales.yLiq = { display:false, position:"right" };
+  scales.yFunding = { position:"right", grid:{ display:false }, ticks:{ color:"#c99bff", font:{ family:"ui-monospace, monospace", size:10 } }, title:{ display:true, text:"Funding %", color:"#c99bff", font:{size:10} } };
+  if(series.length){
+    const barMs = { "1h":3600e3, "1d":86400e3, "1w":7*86400e3 }[state.timeframe] || 86400e3;
+    scales.x = { max: series[series.length-1].t + barMs * RIGHT_MARGIN_BARS };
+  }
+  return scales;
+}
+
+/* Reconstrucción completa: se usa al cambiar de ciclo, timeframe o indicadores.
+   Resetea el zoom a propósito porque el rango de datos cambió de raíz. */
+function renderMainChart(){
+  const series = state.currentSeries || [];
+  const datasets = buildMainDatasets(series);
+
   const opts = baseChartOptions();
-  opts.scales.yPrice = { position:"left", grid:{ color:"#161f29" }, ticks:{ color:"#dbe6ef", font:{ family:"ui-monospace, monospace", size:10 } }, title:{ display:true, text:"Precio USD", color:"#7c8ea1", font:{size:10} } };
-  opts.scales.yOI = { position:"right", grid:{ display:false }, ticks:{ color:"#6fa8dc", font:{ family:"ui-monospace, monospace", size:10 } }, title:{ display:true, text:"OI / Exposición USD", color:"#6fa8dc", font:{size:10} } };
-  opts.scales.yRatio = { position:"right", min:0, max:100, grid:{ display:false }, ticks:{ color:"#8fa4b5", font:{ family:"ui-monospace, monospace", size:10 } }, title:{ display:true, text:"Ratio %", color:"#8fa4b5", font:{size:10} } };
-  opts.scales.yLiq = { display:false, position:"right" };
-  opts.scales.yFunding = { position:"right", grid:{ display:false }, ticks:{ color:"#c99bff", font:{ family:"ui-monospace, monospace", size:10 } }, title:{ display:true, text:"Funding %", color:"#c99bff", font:{size:10} } };
+  Object.assign(opts.scales, buildMainScales(series));
   delete opts.scales.y;
+  opts.plugins.tooltip.filter = (item)=> item.dataset.label !== "0%" && item.dataset.label !== "Precio actual";
 
   const ctx = document.getElementById("mainChart").getContext("2d");
   if(state.mainChart) state.mainChart.destroy();
   state.mainChart = new Chart(ctx, { type:"line", data:{ datasets }, options: opts });
   attachAxisZoom(state.mainChart, ctx.canvas);
+}
+
+/* Actualización en vivo: solo reemplaza los datos de los datasets existentes
+   y redibuja sin animación — el chart NO se destruye, así que el zoom/pan
+   que el usuario ya haya hecho (con el mouse o con Ctrl+rueda) queda intacto,
+   igual que en TradingView cuando llega una vela nueva. */
+function refreshMainChartData(){
+  if(!state.mainChart){ renderMainChart(); return; }
+  const series = state.currentSeries || [];
+  state.mainChart.data.datasets = buildMainDatasets(series);
+  state.mainChart.update("none");
 }
 
 /* Ctrl + rueda del mouse sobre el área de un eje = zoom SOLO de ese eje.
@@ -823,9 +864,12 @@ function attachAxisZoom(chart, canvas){
 
 /* ---------------- Bitfinex margin long/short ---------------- */
 
-async function fetchBitfinexMarginSide(side, tf){
-  const key = BITFINEX_TF_MAP[tf] || "1D";
-  const url = `${BITFINEX_API}/stats1/pos.size:${key}:tBTCUSD:${side}/hist?limit=200`;
+async function fetchBitfinexMarginSide(side){
+  // El key "pos.size" de Bitfinex solo acepta resolución "1m" — pedir 1D/7D
+  // devuelve error sin headers CORS, que el navegador reporta como "Failed
+  // to fetch" en vez del error real. Por eso esto NO depende del timeframe
+  // que elegiste arriba para el gráfico principal.
+  const url = `${BITFINEX_API}/stats1/pos.size:1m:tBTCUSD:${side}/hist?limit=200`;
   const res = await fetch(url);
   if(!res.ok) throw new Error(`HTTP ${res.status}`);
   const raw = await res.json(); // [[MTS, value], ...] viene más nuevo primero
@@ -868,8 +912,8 @@ async function loadBitfinexMargin(){
   statusEl.innerHTML = `<span class="dot-live"></span> consultando Bitfinex (público, sin key)…`;
   try{
     const [longs, shorts] = await Promise.all([
-      fetchBitfinexMarginSide("long", state.timeframe),
-      fetchBitfinexMarginSide("short", state.timeframe),
+      fetchBitfinexMarginSide("long"),
+      fetchBitfinexMarginSide("short"),
     ]);
     renderBitfinexChart(longs, shorts);
     renderBitfinexCard("bfLongValue", "L BTCUSD", longs);
@@ -892,7 +936,7 @@ loadBitfinexMargin();
 // Auto-refresh cada 30s: solo recarga el ciclo en vivo (no tiene sentido
 // refrescar datos históricos que no cambian) y siempre el panel de Bitfinex.
 setInterval(()=>{
-  if(state.cycle.live) loadDataForCurrentSelection();
+  if(state.cycle.live) loadDataForCurrentSelection(true);
   loadBitfinexMargin();
 }, 30000);
 </script>
