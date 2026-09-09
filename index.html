@@ -788,11 +788,13 @@ function buildMainScales(series){
   scales.yRatio = { position:"right", min:0, max:100, grid:{ display:false }, ticks:{ color:"#8fa4b5", font:{ family:"ui-monospace, monospace", size:10 } }, title:{ display:true, text:"Ratio %", color:"#8fa4b5", font:{size:10} } };
   scales.yLiq = { display:false, position:"right" };
   scales.yFunding = { position:"right", grid:{ display:false }, ticks:{ color:"#c99bff", font:{ family:"ui-monospace, monospace", size:10 } }, title:{ display:true, text:"Funding %", color:"#c99bff", font:{size:10} } };
-  if(series.length){
-    const barMs = { "1h":3600e3, "1d":86400e3, "1w":7*86400e3 }[state.timeframe] || 86400e3;
-    scales.x = { max: series[series.length-1].t + barMs * RIGHT_MARGIN_BARS };
-  }
   return scales;
+}
+
+function xAxisMax(series){
+  if(!series.length) return undefined;
+  const barMs = { "1h":3600e3, "1d":86400e3, "1w":7*86400e3 }[state.timeframe] || 86400e3;
+  return series[series.length-1].t + barMs * RIGHT_MARGIN_BARS;
 }
 
 /* Reconstrucción completa: se usa al cambiar de ciclo, timeframe o indicadores.
@@ -803,6 +805,7 @@ function renderMainChart(){
 
   const opts = baseChartOptions();
   Object.assign(opts.scales, buildMainScales(series));
+  opts.scales.x.max = xAxisMax(series); // se suma AL objeto x existente, no lo reemplaza (eso rompía el eje de fechas)
   delete opts.scales.y;
   opts.plugins.tooltip.filter = (item)=> item.dataset.label !== "0%" && item.dataset.label !== "Precio actual";
 
