@@ -1,4 +1,3 @@
-
 // Cloudflare Pages Function — /api/okx
 //
 // OKX es público y sin key, pero lo pasamos igual por acá (server-to-server)
@@ -25,17 +24,24 @@ export async function onRequestGet(context) {
     return json({ error: "metric debe ser oi | funding | longshort" }, 400);
   }
 
+  const cache = caches.default;
+  const cacheKey = new Request(url.toString(), context.request);
+  const cached = await cache.match(cacheKey);
+  if (cached) return cached;
+
   try {
     const res = await fetch(target, { headers: { "User-Agent": "btc-terminal-proxy/1.0" } });
     const body = await res.text();
-    return new Response(body, {
+    const response = new Response(body, {
       status: res.status,
       headers: {
         "content-type": "application/json",
         "access-control-allow-origin": "*",
-        "cache-control": "public, max-age=30",
+        "cache-control": "public, max-age=25",
       },
     });
+    if (res.ok) context.waitUntil(cache.put(cacheKey, response.clone()));
+    return response;
   } catch (err) {
     return json({ error: String(err) }, 502);
   }

@@ -16,6 +16,14 @@ export async function onRequestGet(context) {
   const url = new URL(context.request.url);
   const currency = (url.searchParams.get("currency") || "BTC").toUpperCase();
 
+  // Cache en el borde de Cloudflare: Max Pain no necesita recalcularse cada
+  // 30s (el OI de opciones no se mueve tan rápido), y esto es justo lo que
+  // evita el HTTP 429 de Deribit cuando hay refrescos frecuentes.
+  const cache = caches.default;
+  const cacheKey = new Request(url.toString(), context.request);
+  const cached = await cache.match(cacheKey);
+  if (cached) return cached;
+
   try {
     const res = await fetch(
       `https://www.deribit.com/api/v2/public/get_book_summary_by_currency?currency=${currency}&kind=option`,
@@ -90,7 +98,7 @@ export async function onRequestGet(context) {
     const totalCallOI = distribution.reduce((s, d) => s + d.callOI, 0);
     const totalPutOI = distribution.reduce((s, d) => s + d.putOI, 0);
 
-    return json({
+    const response = json({
       currency,
       expiry: nearestExpiry,
       expiryDate: nearestDate.toISOString(),
@@ -101,7 +109,9 @@ export async function onRequestGet(context) {
       putCallRatio: totalCallOI > 0 ? totalPutOI / totalCallOI : null,
       distribution,
       updatedAt: new Date().toISOString(),
-    }, 200, 30);
+    }, 200, 300); // 5 minutos — el OI de opciones no cambia tan rápido como para justificar más
+    context.waitUntil(cache.put(cacheKey, response.clone()));
+    return response;
   } catch (err) {
     return json({ error: String(err) }, 502);
   }
