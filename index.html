@@ -154,6 +154,23 @@ body{padding:28px 36px;min-height:100vh;}
 .bf-long{--bf-color:#00e5cc;}
 .bf-short{--bf-color:#ff3fa4;}
 
+/* ---------- Deribit Max Pain panel ---------- */
+.mp-layout{display:grid;grid-template-columns:1fr 260px;gap:24px;align-items:stretch;}
+@media(max-width:800px){ .mp-layout{grid-template-columns:1fr;} }
+.mp-summary{display:flex;flex-direction:column;gap:14px;justify-content:center;}
+.mp-stat{display:flex;flex-direction:column;gap:2px;}
+.mp-stat-label{font-family:var(--data-font);font-size:11px;color:var(--ink-dim);}
+.mp-stat-value{font-family:var(--data-font);font-size:18px;font-weight:600;color:var(--ink);}
+.mp-highlight{color:var(--amber);}
+.mp-call{color:var(--long);}
+.mp-put{color:var(--short);}
+
+/* ---------- Fear & Greed badge ---------- */
+.fng-badge{
+  display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:4px 10px;
+  border-radius:12px;font-family:var(--data-font);font-size:11.5px;border:1px solid var(--line);
+}
+
 .illus-banner{
   background:#1c1509;border:1px solid #4a3512;color:var(--amber);font-size:12.5px;
   padding:14px 18px;border-radius:4px;margin-bottom:22px;font-family:var(--ui-font);line-height:1.6;
@@ -186,6 +203,7 @@ footer a{color:var(--oi);}
     <div class="price-live">
       <div class="px" id="livePrice">—</div>
       <div class="chg" id="liveChg">cargando…</div>
+      <div class="fng-badge" id="fngBadge" style="display:none;"></div>
     </div>
   </div>
 
@@ -244,6 +262,29 @@ footer a{color:var(--oi);}
     </div>
   </div>
 
+  <div class="panel">
+    <h2>
+      <span>Deribit · Max Pain de Opciones <span class="hint" id="mpExpiryHint"></span></span>
+    </h2>
+    <div id="mpStatus" class="status-line" style="margin-bottom:10px;"></div>
+    <div class="mp-layout">
+      <div class="chart-box small"><canvas id="maxPainChart"></canvas></div>
+      <div class="mp-summary">
+        <div class="mp-stat"><span class="mp-stat-label">Spot</span><span class="mp-stat-value" id="mpSpot">—</span></div>
+        <div class="mp-stat"><span class="mp-stat-label">Max Pain</span><span class="mp-stat-value mp-highlight" id="mpStrike">—</span></div>
+        <div class="mp-stat"><span class="mp-stat-label">Put/Call ratio</span><span class="mp-stat-value" id="mpPcRatio">—</span></div>
+        <div class="mp-stat"><span class="mp-stat-label">OI Calls</span><span class="mp-stat-value mp-call" id="mpCallOI">—</span></div>
+        <div class="mp-stat"><span class="mp-stat-label">OI Puts</span><span class="mp-stat-value mp-put" id="mpPutOI">—</span></div>
+      </div>
+    </div>
+    <div class="legend-note">
+      Max Pain de <strong>opciones</strong> (no de futuros perpetuos) — es una métrica distinta a la que muestran
+      Coinglass o similares para liquidaciones de futuros. Se calcula con una fórmula pública y conocida sobre el
+      open interest real de Deribit por strike: es el precio de liquidación donde el conjunto de opciones (calls +
+      puts) vale menos al vencimiento. Corresponde al vencimiento más próximo disponible en Deribit.
+    </div>
+  </div>
+
   <footer id="dataFooter"></footer>
 </div>
 
@@ -259,7 +300,6 @@ footer a{color:var(--oi);}
    ========================================================================= */
 
 const BINANCE_FAPI = "https://fapi.binance.com";
-const BITFINEX_API = "https://api-pub.bitfinex.com/v2";
 
 const CYCLES = [
   { id:"c3", label:"Ciclo 3", range:"2020 – 2024", start:"2020-01-01", end:"2024-01-01", live:false, peakCap:1280,
@@ -284,7 +324,15 @@ const INDICATORS = [
   { id:"liqShort",   label:"Liquidaciones Short", color:"var(--liq-short)" },
   { id:"fundingRate", label:"Funding Rate",       color:"#c99bff" },
   { id:"fundingPredicted", label:"Funding Predicho (en vivo)", color:"#ff2ec4" },
+  { id:"oiAgg",        label:"OI Agregado (Binance+OKX+Bybit)",        color:"#ffd166" },
+  { id:"longRatioAgg", label:"Ratio Long Agregado (3 exch)",           color:"#2dd4bf" },
+  { id:"shortRatioAgg",label:"Ratio Short Agregado (3 exch)",          color:"#fb7185" },
+  { id:"fundingAgg",   label:"Funding Rate Agregado (3 exch)",         color:"#f59e0b" },
 ];
+// Los indicadores "Agregado" solo tienen dato en Ciclo 4 (en vivo) — se
+// calculan como el promedio entre Binance + OKX + Bybit en cada timestamp.
+// En los ciclos precargados quedan en null (no hay histórico de OKX/Bybit
+// guardado), como cualquier otro campo no disponible para ese ciclo.
 
 let state = {
   cycle: CYCLES[1],
@@ -436,6 +484,99 @@ async function fetchLivePredictedFunding(){
   return { t: raw.time, fundingRate: parseFloat(raw.lastFundingRate) * 100 };
 }
 
+/* ---------------- OKX y Bybit (vía proxy propio, agregación 3 exchanges) ---------------- */
+// Estos dos alimentan las líneas "Agregado" — se promedian con el dato de
+// Binance que ya tenemos. Solo aplica al Ciclo 4 en vivo.
+
+async function fetchOkxSeries(metric, tf){
+  const periodMap = { "1h":"1H", "1d":"1D", "1w":"1D" }; // este endpoint de OKX no tiene "1W"
+  const period = periodMap[tf] || "1D";
+  const res = await fetch(`/api/okx?metric=${metric}&period=${period}`);
+  if(!res.ok) throw new Error(`OKX ${metric} HTTP ${res.status}`);
+  const raw = await res.json();
+  const rows = raw.data || [];
+  if(metric === "oi"){
+    return rows.map(r=>({ t:parseInt(r[0],10), value:parseFloat(r[1]) })).filter(p=>isFinite(p.t)&&isFinite(p.value));
+  }
+  if(metric === "funding"){
+    return rows.map(r=>({ t:parseInt(r.fundingTime,10), value:parseFloat(r.realizedRate)*100 })).filter(p=>isFinite(p.t)&&isFinite(p.value));
+  }
+  if(metric === "longshort"){
+    return rows.map(r=>{
+      const ratio = parseFloat(r[1]);
+      const longPct = ratio/(1+ratio)*100;
+      return { t:parseInt(r[0],10), long:longPct, short:100-longPct };
+    }).filter(p=>isFinite(p.t));
+  }
+  return [];
+}
+
+async function fetchBybitSeries(metric, tf){
+  const periodMap = { "1h":"1h", "1d":"1d", "1w":"1d" };
+  const period = periodMap[tf] || "1d";
+  const res = await fetch(`/api/bybit?metric=${metric}&period=${period}`);
+  if(!res.ok) throw new Error(`Bybit ${metric} HTTP ${res.status}`);
+  const raw = await res.json();
+  const rows = (raw.result && raw.result.list) || [];
+  if(metric === "oi"){
+    return rows.map(r=>({ t:parseInt(r.timestamp,10), value:parseFloat(r.openInterest) })).filter(p=>isFinite(p.t)&&isFinite(p.value));
+  }
+  if(metric === "funding"){
+    return rows.map(r=>({ t:parseInt(r.fundingRateTimestamp,10), value:parseFloat(r.fundingRate)*100 })).filter(p=>isFinite(p.t)&&isFinite(p.value));
+  }
+  if(metric === "longshort"){
+    return rows.map(r=>{
+      const longPct = parseFloat(r.buyRatio)*100;
+      return { t:parseInt(r.timestamp,10), long:longPct, short:100-longPct };
+    }).filter(p=>isFinite(p.t));
+  }
+  return [];
+}
+
+function nearestWithTolerance(arr, t, toleranceMs){
+  if(!arr || !arr.length) return null;
+  let best=null, bestDiff=Infinity;
+  for(const item of arr){
+    const d = Math.abs(item.t-t);
+    if(d<bestDiff){ bestDiff=d; best=item; }
+  }
+  return (best && bestDiff<=toleranceMs) ? best : null;
+}
+
+function avgNonNull(arr){
+  const vals = arr.filter(v=>v!=null && !isNaN(v));
+  if(!vals.length) return null;
+  return vals.reduce((a,b)=>a+b,0)/vals.length;
+}
+
+async function mergeExchangeAggregates(series, tf){
+  const barMs = { "1h":3600e3, "1d":86400e3, "1w":7*86400e3 }[tf] || 86400e3;
+  const tolerance = barMs/2;
+
+  const results = await Promise.allSettled([
+    fetchOkxSeries("oi", tf), fetchOkxSeries("funding", tf), fetchOkxSeries("longshort", tf),
+    fetchBybitSeries("oi", tf), fetchBybitSeries("funding", tf), fetchBybitSeries("longshort", tf),
+  ]);
+  const [okxOi, okxFunding, okxLS, bybitOi, bybitFunding, bybitLS] = results.map(r => r.status==="fulfilled" ? r.value : []);
+  const fails = results.filter(r=>r.status==="rejected").length;
+
+  for(const p of series){
+    const oOi = nearestWithTolerance(okxOi, p.t, tolerance)?.value ?? null;
+    const bOi = nearestWithTolerance(bybitOi, p.t, tolerance)?.value ?? null;
+    const oLS = nearestWithTolerance(okxLS, p.t, tolerance);
+    const bLS = nearestWithTolerance(bybitLS, p.t, tolerance);
+    const oFr = nearestWithTolerance(okxFunding, p.t, tolerance)?.value ?? null;
+    const bFr = nearestWithTolerance(bybitFunding, p.t, tolerance)?.value ?? null;
+
+    p.oiAggregated = avgNonNull([p.oi, oOi, bOi]);
+    p.longRatioAggregated = avgNonNull([p.longRatio, oLS?.long ?? null, bLS?.long ?? null]);
+    p.shortRatioAggregated = avgNonNull([p.shortRatio, oLS?.short ?? null, bLS?.short ?? null]);
+    p.fundingAggregated = avgNonNull([p.fundingRate, oFr, bFr]);
+  }
+
+  return { fails, total: 6 };
+}
+
 /* ---------------- Illustrative generator (cycles 1-3) ---------------- */
 // Deterministic pseudo-random so the shape is stable across reloads/toggles.
 function seeded(seedStr){
@@ -512,6 +653,10 @@ async function loadDataForCurrentSelection(isAutoRefresh=false){
       const merged = mergeSeries(klines, oiHist, lsHist, fundingHist);
       state.currentSeries = merged;
       fetchLivePredictedFunding().then(p=>{ state.predictedFunding = p; refreshMainChartData(); }).catch(()=>{ state.predictedFunding = null; });
+      mergeExchangeAggregates(merged, tf).then(({fails,total})=>{
+        state.aggStatus = fails===0 ? "ok" : (fails===total ? "fail" : "partial");
+        refreshMainChartData();
+      }).catch(()=>{ state.aggStatus = "fail"; });
       statusEl.innerHTML = `<span class="dot-live"></span> en vivo — fuente: <a href="https://binance-docs.github.io/apidocs/futures/en/" target="_blank">Binance Futures public API</a> · sin API key · última vela ${new Date(merged.at(-1).t).toLocaleString()} · se refresca solo cada 30s`;
       footer.innerHTML = renderSourcesList([
         ["Precio / klines", "Binance fapi/v1/klines"],
@@ -519,7 +664,8 @@ async function loadDataForCurrentSelection(isAutoRefresh=false){
         ["Ratio Long/Short", "Binance futures/data/globalLongShortAccountRatio"],
         ["Liquidaciones", "stream forceOrder de Binance (best-effort, solo eventos en vivo)"],
         ["Funding Rate", "Binance fapi/v1/fundingRate (realizado) + fapi/v1/premiumIndex (predicho, un punto)"],
-        ["Bitfinex Long/Short margin", "api-pub.bitfinex.com/v2/stats1 (últimas 200 barras)"],
+        ["Bitfinex Long/Short margin", "api-pub.bitfinex.com/v2/stats1, vía proxy propio /api/bitfinex (Bitfinex no manda CORS)"],
+        ["OI/Long-Short/Funding Agregado", "promedio Binance + OKX + Bybit, vía proxies propios /api/okx y /api/bybit"],
       ]);
       updateLivePrice(merged.at(-1).price, merged.at(-2)?.price);
     }catch(err){
@@ -776,6 +922,39 @@ function buildMainDatasets(series){
     });
   }
 
+  if(state.active.has("oiAgg")){
+    datasets.push({
+      label:"OI Agregado (USD)", yAxisID:"yOI",
+      data: series.map(p=>({x:p.t,y:p.oiAggregated ?? null})),
+      borderColor:"#ffd166", backgroundColor:"transparent",
+      borderWidth:1.6, pointRadius:0, tension:0.15, borderDash:[6,2],
+    });
+  }
+  if(state.active.has("longRatioAgg")){
+    datasets.push({
+      label:"Ratio Long Agregado (%)", yAxisID:"yRatio",
+      data: series.map(p=>({x:p.t,y:p.longRatioAggregated ?? null})),
+      borderColor:"#2dd4bf", backgroundColor:"transparent",
+      borderWidth:1.6, pointRadius:0, tension:0.2, borderDash:[6,2],
+    });
+  }
+  if(state.active.has("shortRatioAgg")){
+    datasets.push({
+      label:"Ratio Short Agregado (%)", yAxisID:"yRatio",
+      data: series.map(p=>({x:p.t,y:p.shortRatioAggregated ?? null})),
+      borderColor:"#fb7185", backgroundColor:"transparent",
+      borderWidth:1.6, pointRadius:0, tension:0.2, borderDash:[6,2],
+    });
+  }
+  if(state.active.has("fundingAgg")){
+    datasets.push({
+      label:"Funding Rate Agregado (%)", yAxisID:"yFunding",
+      data: smoothSeries(series.map(p=>({x:p.t,y:p.fundingAggregated})), 5),
+      borderColor:"#f59e0b", backgroundColor:"transparent",
+      borderWidth:1.6, pointRadius:0, tension:0.3, borderDash:[6,2],
+    });
+  }
+
   return datasets;
 }
 
@@ -868,11 +1047,11 @@ function attachAxisZoom(chart, canvas){
 /* ---------------- Bitfinex margin long/short ---------------- */
 
 async function fetchBitfinexMarginSide(side){
-  // El key "pos.size" de Bitfinex solo acepta resolución "1m" — pedir 1D/7D
-  // devuelve error sin headers CORS, que el navegador reporta como "Failed
-  // to fetch" en vez del error real. Por eso esto NO depende del timeframe
-  // que elegiste arriba para el gráfico principal.
-  const url = `${BITFINEX_API}/stats1/pos.size:1m:tBTCUSD:${side}/hist?limit=200`;
+  // Bitfinex no manda header CORS en este endpoint (confirmado: el navegador
+  // lo bloquea con "No 'Access-Control-Allow-Origin' header"). Por eso esto
+  // pasa por /api/bitfinex, una Cloudflare Pages Function propia que hace el
+  // pedido server-to-server (ahí CORS no aplica) — ver functions/api/bitfinex.js.
+  const url = `/api/bitfinex?side=${side}`;
   const res = await fetch(url);
   if(!res.ok) throw new Error(`HTTP ${res.status}`);
   const raw = await res.json(); // [[MTS, value], ...] viene más nuevo primero
@@ -927,6 +1106,74 @@ async function loadBitfinexMargin(){
   }
 }
 
+/* ---------------- Deribit Max Pain ---------------- */
+
+function fmtCompact(n){
+  if(n==null || isNaN(n)) return "—";
+  if(Math.abs(n) >= 1000) return (n/1000).toFixed(1)+"k";
+  return n.toFixed(1);
+}
+
+function renderMaxPainChart(distribution){
+  const ctx = document.getElementById("maxPainChart").getContext("2d");
+  if(state.maxPainChart) state.maxPainChart.destroy();
+  const opts = baseChartOptions({ xType:"linear", zoomable:false });
+  opts.scales.x.title = { display:true, text:"Strike", color:"#7c8ea1", font:{size:10} };
+  opts.scales.y = { position:"left", grid:{ color:"#161f29" }, ticks:{ color:"#7c8ea1", font:{ family:"ui-monospace, monospace", size:10 } }, title:{ display:true, text:"Open Interest (contratos)", color:"#7c8ea1", font:{size:10} } };
+  state.maxPainChart = new Chart(ctx, {
+    type:"line",
+    data:{ datasets:[
+      { label:"Call OI", data: distribution.map(d=>({x:d.strike,y:d.callOI})), borderColor:"#3ecf8e", backgroundColor:"rgba(62,207,142,.12)", fill:true, stepped:true, pointRadius:0, borderWidth:1.4 },
+      { label:"Put OI", data: distribution.map(d=>({x:d.strike,y:d.putOI})), borderColor:"#e2596b", backgroundColor:"rgba(226,89,107,.12)", fill:true, stepped:true, pointRadius:0, borderWidth:1.4 },
+    ]},
+    options: opts,
+  });
+}
+
+async function loadMaxPain(){
+  const statusEl = document.getElementById("mpStatus");
+  statusEl.innerHTML = `<span class="dot-live"></span> consultando Deribit (público, sin key)…`;
+  try{
+    const res = await fetch("/api/deribit-maxpain?currency=BTC");
+    const data = await res.json();
+    if(!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+
+    document.getElementById("mpExpiryHint").textContent = `vencimiento ${data.expiry}`;
+    document.getElementById("mpSpot").textContent = data.spot ? `$${Math.round(data.spot).toLocaleString()}` : "—";
+    document.getElementById("mpStrike").textContent = data.maxPainStrike ? `$${data.maxPainStrike.toLocaleString()}` : "—";
+    document.getElementById("mpPcRatio").textContent = data.putCallRatio!=null ? data.putCallRatio.toFixed(2) : "—";
+    document.getElementById("mpCallOI").textContent = fmtCompact(data.totalCallOI);
+    document.getElementById("mpPutOI").textContent = fmtCompact(data.totalPutOI);
+
+    renderMaxPainChart(data.distribution);
+    statusEl.innerHTML = `<span class="dot-live"></span> en vivo — fuente: <a href="https://docs.deribit.com/" target="_blank">Deribit public API</a> · sin API key`;
+  }catch(err){
+    statusEl.innerHTML = `⚠ no se pudo calcular Max Pain (${err.message})`;
+  }
+}
+
+/* ---------------- Fear & Greed ---------------- */
+
+async function loadFearGreed(){
+  const badge = document.getElementById("fngBadge");
+  try{
+    const res = await fetch("https://api.alternative.me/fng/?limit=1");
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const item = data.data && data.data[0];
+    if(!item) throw new Error("sin datos");
+    const value = parseInt(item.value, 10);
+    const label = item.value_classification;
+    const color = value>=75 ? "#3ecf8e" : value>=55 ? "#8fd6a8" : value>=45 ? "#c9c9a3" : value>=25 ? "#e2a05a" : "#e2596b";
+    badge.style.display = "inline-flex";
+    badge.style.borderColor = color;
+    badge.style.color = color;
+    badge.textContent = `Fear & Greed: ${value} (${label})`;
+  }catch(err){
+    badge.style.display = "none"; // si falla, simplemente no se muestra — no es un dato crítico
+  }
+}
+
 /* ---------------- boot ---------------- */
 buildCycleSelector();
 buildIndicatorChips();
@@ -935,12 +1182,16 @@ document.getElementById("resetZoomBtn").addEventListener("click", ()=>{
   if(state.mainChart) state.mainChart.resetZoom();
 });
 loadBitfinexMargin();
+loadMaxPain();
+loadFearGreed();
 
 // Auto-refresh cada 30s: solo recarga el ciclo en vivo (no tiene sentido
-// refrescar datos históricos que no cambian) y siempre el panel de Bitfinex.
+// refrescar datos históricos que no cambian) y siempre los paneles en vivo.
 setInterval(()=>{
   if(state.cycle.live) loadDataForCurrentSelection(true);
   loadBitfinexMargin();
+  loadMaxPain();
+  loadFearGreed();
 }, 30000);
 </script>
 </body>
