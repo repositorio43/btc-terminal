@@ -1185,14 +1185,19 @@ loadBitfinexMargin();
 loadMaxPain();
 loadFearGreed();
 
-// Auto-refresh cada 30s: solo recarga el ciclo en vivo (no tiene sentido
-// refrescar datos históricos que no cambian) y siempre los paneles en vivo.
+// Refresco cada 30s: precio/OI/funding en vivo y margin de Bitfinex, que sí
+// se mueven rápido. Refresco cada 5 min: Max Pain y Fear&Greed — pedirlos
+// cada 30s no aportaba nada (esos datos no cambian tan rápido) y fue lo que
+// nos hizo chocar con el límite de pedidos de Deribit (HTTP 429).
 setInterval(()=>{
   if(state.cycle.live) loadDataForCurrentSelection(true);
   loadBitfinexMargin();
+}, 30000);
+
+setInterval(()=>{
   loadMaxPain();
   loadFearGreed();
-}, 30000);
+}, 5*60*1000);
 </script>
 </body>
 </html>
