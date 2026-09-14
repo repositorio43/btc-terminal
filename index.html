@@ -229,9 +229,11 @@ footer a{color:var(--oi);}
     </h2>
     <div class="chart-box"><canvas id="mainChart"></canvas></div>
     <div class="legend-note">
-      Ratio long y ratio short se grafican vinculados (short = 100 − long) sobre el mismo eje derecho, 0–100%.
+      Ratio Long/Short: promedio Binance+OKX+Bybit cuando hay datos de los tres (Ciclo 4), o solo Binance cuando no
+      (Ciclo 3) — short siempre es 100 − long, mismo eje derecho, 0–100%.
       Liquidaciones se muestran como línea de intensidad (USD). Funding rate en %, eje propio.
-      Exposición long/short se deriva de <em>openInterest × precio</em> ponderado por el ratio long/short del mismo timestamp.
+      Exposición Long se deriva de <em>openInterest × (ratio long / 100)</em> — una estimación en USD de cuánta plata
+      está del lado comprador (short sería el complemento hasta el total de OI, no se grafica aparte por redundancia).
     </div>
   </div>
 
@@ -316,28 +318,29 @@ const CYCLES = [
 const INDICATORS = [
   { id:"price",    label:"Precio",              color:"#dbe6ef", always:true },
   { id:"oi",        label:"Open Interest",       color:"var(--oi)" },
-  { id:"longRatio",  label:"Ratio Long",          color:"var(--long)" },
-  { id:"shortRatio", label:"Ratio Short",         color:"var(--short)" },
-  { id:"longExp",    label:"Exposición Long",     color:"#7fe0b0" },
-  { id:"shortExp",   label:"Exposición Short",    color:"#f0909e" },
+  { id:"exposure",   label:"Exposición (OI × Ratio Long)", color:"#7fe0b0" },
   { id:"liqLong",    label:"Liquidaciones Long",  color:"var(--liq-long)" },
   { id:"liqShort",   label:"Liquidaciones Short", color:"var(--liq-short)" },
   { id:"fundingRate", label:"Funding Rate",       color:"#c99bff" },
   { id:"fundingPredicted", label:"Funding Predicho (en vivo)", color:"#ff2ec4" },
   { id:"oiAgg",        label:"OI Agregado (Binance+OKX+Bybit)",        color:"#ffd166" },
-  { id:"longRatioAgg", label:"Ratio Long Agregado (3 exch)",           color:"#2dd4bf" },
-  { id:"shortRatioAgg",label:"Ratio Short Agregado (3 exch)",          color:"#fb7185" },
+  { id:"longRatioAgg", label:"Ratio Long",           color:"var(--long)" },
+  { id:"shortRatioAgg",label:"Ratio Short",          color:"var(--short)" },
   { id:"fundingAgg",   label:"Funding Rate Agregado (3 exch)",         color:"#f59e0b" },
 ];
-// Los indicadores "Agregado" solo tienen dato en Ciclo 4 (en vivo) — se
-// calculan como el promedio entre Binance + OKX + Bybit en cada timestamp.
-// En los ciclos precargados quedan en null (no hay histórico de OKX/Bybit
-// guardado), como cualquier otro campo no disponible para ese ciclo.
+// "Ratio Long/Short" (antes separados en versión "sola Binance" y versión
+// "Agregado") quedaron unificados en uno solo: muestra el promedio de
+// Binance+OKX+Bybit cuando hay datos de los tres (Ciclo 4 en vivo), y cae
+// automáticamente al valor de Binance solo cuando no hay más (Ciclo 3) —
+// así nunca se queda sin esta línea, solo cambia su precisión según el ciclo.
+// "Exposición" se dejó en un solo indicador (antes Long y Short por
+// separado): como short = OI - long, mostrar los dos es redundante, con uno
+// alcanza para leer el reparto completo.
 
 let state = {
   cycle: CYCLES[1],
   timeframe: "1h",
-  active: new Set(["price","oi","longRatio","shortRatio"]),
+  active: new Set(["price","oi","longRatioAgg","shortRatioAgg"]),
   mainChart: null,
   liveSocket: null,
 };
@@ -833,36 +836,11 @@ function buildMainDatasets(series){
     });
   }
 
-  if(state.active.has("longRatio")){
-    datasets.push({
-      label:"Ratio Long (%)", yAxisID:"yRatio",
-      data: series.map(p=>({x:p.t,y:p.longRatio})),
-      borderColor:"#3ecf8e", backgroundColor:"transparent",
-      borderWidth:1.4, pointRadius:0, tension:0.2,
-    });
-  }
-  if(state.active.has("shortRatio")){
-    datasets.push({
-      label:"Ratio Short (%)", yAxisID:"yRatio",
-      data: series.map(p=>({x:p.t,y:p.shortRatio})),
-      borderColor:"#e2596b", backgroundColor:"transparent",
-      borderWidth:1.4, pointRadius:0, tension:0.2,
-    });
-  }
-
-  if(state.active.has("longExp")){
+  if(state.active.has("exposure")){
     datasets.push({
       label:"Exposición Long (USD, est.)", yAxisID:"yOI",
       data: series.map(p=> (p.oi!=null && p.longRatio!=null) ? {x:p.t,y:p.oi*(p.longRatio/100)} : {x:p.t,y:null}),
       borderColor:"#7fe0b0", backgroundColor:"transparent",
-      borderWidth:1, pointRadius:0, tension:0.15, borderDash:[5,3],
-    });
-  }
-  if(state.active.has("shortExp")){
-    datasets.push({
-      label:"Exposición Short (USD, est.)", yAxisID:"yOI",
-      data: series.map(p=> (p.oi!=null && p.shortRatio!=null) ? {x:p.t,y:p.oi*(p.shortRatio/100)} : {x:p.t,y:null}),
-      borderColor:"#f0909e", backgroundColor:"transparent",
       borderWidth:1, pointRadius:0, tension:0.15, borderDash:[5,3],
     });
   }
@@ -932,18 +910,18 @@ function buildMainDatasets(series){
   }
   if(state.active.has("longRatioAgg")){
     datasets.push({
-      label:"Ratio Long Agregado (%)", yAxisID:"yRatio",
-      data: series.map(p=>({x:p.t,y:p.longRatioAggregated ?? null})),
-      borderColor:"#2dd4bf", backgroundColor:"transparent",
-      borderWidth:1.6, pointRadius:0, tension:0.2, borderDash:[6,2],
+      label:"Ratio Long (%)", yAxisID:"yRatio",
+      data: series.map(p=>({x:p.t,y:(p.longRatioAggregated ?? p.longRatio) ?? null})),
+      borderColor:"var(--long)", backgroundColor:"transparent",
+      borderWidth:1.6, pointRadius:0, tension:0.2,
     });
   }
   if(state.active.has("shortRatioAgg")){
     datasets.push({
-      label:"Ratio Short Agregado (%)", yAxisID:"yRatio",
-      data: series.map(p=>({x:p.t,y:p.shortRatioAggregated ?? null})),
-      borderColor:"#fb7185", backgroundColor:"transparent",
-      borderWidth:1.6, pointRadius:0, tension:0.2, borderDash:[6,2],
+      label:"Ratio Short (%)", yAxisID:"yRatio",
+      data: series.map(p=>({x:p.t,y:(p.shortRatioAggregated ?? p.shortRatio) ?? null})),
+      borderColor:"var(--short)", backgroundColor:"transparent",
+      borderWidth:1.6, pointRadius:0, tension:0.2,
     });
   }
   if(state.active.has("fundingAgg")){
